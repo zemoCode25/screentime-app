@@ -1,219 +1,117 @@
-# WellTime Implementation Plan (Codex CLI Checklist)
+# Screentime App Implementation Plan
 
-> Rules for Codex execution
+This doc is the guide for this session. Keep tasks small and verifiable. Do not change app logic unless specified.
 
-- Keep each task small and verifiable (1 feature slice per commit).
-- No extra screens beyond: Parent Auth (Login/Signup), Parent Home, Child Registration Form, Selected Child (Usage/Analytics tabs), Selected App, Child Auth (Login), Child Home, Child Analytics.
-- Prefer aggregated screen-time storage (daily; hourly optional).
+## Current focus
+- Phase 2: Data model and RLS (verify RLS policies and child access)
 
----
+## Target folder structure
 
-## Phase 0 — Project Setup
+Routes (Expo Router): `app/`
+```
+app/
+  (auth)/
+    login.tsx
+    signup.tsx
+  (parent)/
+    home.tsx
+    child/
+      [childId].tsx
+      app/
+        [packageName].tsx
+  (child)/
+    home.tsx
+    analytics.tsx
+```
 
-- [ ] Add `docs/IMPLEMENTATION_PLAN.md` (this file)
-- [ ] Add `docs/DB_SCHEMA.sql` (final SQL schema)
-- [ ] Add `docs/API_CONTRACT.md` (payload shapes)
-- [ ] Confirm Expo app boots
-- [ ] Configure NativeWind
-- [ ] Configure TanStack Query provider
-- [ ] Configure Supabase client (env vars + client init)
-- [ ] Add a simple “health render” screen to confirm navigation works
+Application code: `src/`
+```
+src/
+  features/
+    auth/
+      components/
+      hooks/
+      services/
+      validation/
+    parent/
+      hooks/
+      services/
+    child/
+      hooks/
+      services/
+  ui/
+  lib/
+  utils/
+```
 
-**Verify**
+## Repo scan summary (current state)
+- Expo Router app with route groups in `app/(auth)`, `app/(parent)`, and `app/(child)` using placeholder screens.
+- Supabase client in `lib/supabase.ts` uses `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`.
+- Supabase types live in `types/database-types.ts` and the public schema is currently empty.
+- Supabase local config is in `supabase/config.toml` with no schema files configured.
 
-- [ ] `npm run start` runs without errors
-- [ ] App renders a basic screen
+## Phase 0: Docs and baseline (this pass)
+- [x] `docs/IMPLEMENTATION_PLAN.md`
+- [x] `docs/DB_SCHEMA.sql` draft
+- [x] `docs/API_CONTRACT.md` draft
+- [ ] Confirm app boots with `npm run start` when needed
 
----
+## Phase 1: Route + module layout (no logic changes)
+- [x] Create target route groups under `app/` as listed above
+- [x] Move existing starter routes into the new structure (or delete example routes)
+- [x] Create `src/` folders for features and shared code
+- [ ] Update import aliases to point to `src/` once files are moved
 
-## Phase 1 — Supabase DB + RLS
+Verify
+- [ ] App boots with the new route tree
+- [ ] No logic changes; only file moves and layout setup
 
-- [ ] Execute schema: enums, tables, indexes, triggers
-- [ ] Enable RLS on all tables
-- [ ] Add RLS policies:
-  - [ ] Parent can CRUD their `children`
-  - [ ] Child can read their own `children` row and write usage for their `child_id`
-  - [ ] Parent/Child can read usage + limits for their linked child
-- [ ] (Optional) Insert seed test data for local testing
+## Phase 2: Data model and RLS (current)
+- [ ] Apply schema in `docs/DB_SCHEMA.sql`
+- [ ] Regenerate `types/database-types.ts`
+- [ ] Verify RLS policies for parent and child access
 
-**Verify**
+Verify
+- [ ] Parent reads and writes only their children
+- [ ] Child reads only their own data
+- [ ] Usage and limits upsert safely
 
-- [ ] Parent can select only their children
-- [ ] Child can upsert only their usage rows
-- [ ] Other-user access is denied by RLS
+## Phase 3: Auth and session
+- [ ] Parent and child auth flows
+- [ ] Role-based routing after login
+- [ ] Session restore and sign out
 
----
+Verify
+- [ ] Parent lands on parent home
+- [ ] Child lands on child home
+- [ ] Sign out returns to auth flow
 
-## Phase 2 — Authentication (Parent + Child)
+## Phase 4: Parent flows
+- [ ] Parent home with child list
+- [ ] Child registration form and create flow
+- [ ] Selected child usage tab (day and week)
+- [ ] Selected app limits and insights
 
-- [ ] Parent Login: email/password + Google
-- [ ] Parent Sign-up: email/password + Google
-- [ ] Child Login only: email/password + Google
-- [ ] Session restore on app launch
-- [ ] Role-based routing (based on `profiles.role`):
-  - [ ] parent → Parent Home
-  - [ ] child → Child Home
-- [ ] Sign out clears session and cache
+Verify
+- [ ] Newly added child appears immediately
+- [ ] Usage and limits render from DB
 
-**Verify**
+## Phase 5: Child flows
+- [ ] Child home with today's usage
+- [ ] Child analytics KPIs and charts
 
-- [ ] Parent account logs in and reaches Parent Home
-- [ ] Child account logs in and reaches Child Home
-- [ ] Sign out returns to correct auth flow
+Verify
+- [ ] Child view matches parent data for the same child
 
----
+## Phase 6: Device usage sync (Android MVP)
+- [ ] UsageStats permission flow
+- [ ] Daily aggregation and batch upsert
+- [ ] Update child_apps metadata
 
-## Phase 3 — Parent Home + Child Registration
+Verify
+- [ ] Parent sees updated usage after sync
 
-- [ ] Parent Home header: app title/logo + profile dropdown + sign out
-- [ ] Parent Home list of child cards (name, age, interests, avg screen time)
-- [ ] “+” opens Child Registration Form
-- [ ] Child Registration Form fields:
-  - [ ] name, age, grade_level
-  - [ ] interests[]
-  - [ ] motivations[]
-- [ ] Create child row in `children` with `parent_user_id = auth.uid()`
-- [ ] Refresh child list after add
-- [ ] Implement TanStack Query hooks:
-  - [ ] `useChildrenList()`
-  - [ ] `useCreateChild()`
-
-**Verify**
-
-- [ ] Adding a child immediately appears on Parent Home
-- [ ] Avg screen time placeholder works (0 if no data)
-
----
-
-## Phase 4 — Parent Selected Child Screen (Usage Tab)
-
-- [ ] Navigate from child card → Selected Child screen
-- [ ] Tabs: Usage | Analytics (Analytics implemented later)
-- [ ] Usage tab:
-  - [ ] Day/Week filter (default Day)
-  - [ ] Bar graph for total screen time:
-    - [ ] Day: selected date total
-    - [ ] Week: Sun–Sat totals
-  - [ ] App list for selected period:
-    - [ ] app icon/name
-    - [ ] usage today (or selected date)
-    - [ ] remaining time (if limit exists)
-    - [ ] progress bar
-  - [ ] Tap app row → Selected Application screen
-
-**Verify**
-
-- [ ] Day filter shows correct totals for chosen date
-- [ ] Week filter shows 7 bars with correct sums
-- [ ] App list matches stored `app_usage_daily`
-
----
-
-## Phase 5 — Parent Selected Application Screen (Limits + Bonus + AI panels)
-
-- [ ] KPIs:
-  - [ ] screen time today
-  - [ ] avg usage (day/week toggle)
-- [ ] Chart:
-  - [ ] Day/Week usage chart (toggle acceptable)
-- [ ] Add/Edit Usage Limit form:
-  - [ ] apply days (multi-select) OR whole-week toggle
-  - [ ] limit input (hours/minutes)
-  - [ ] save to `app_limits` (upsert)
-- [ ] Bonus extension:
-  - [ ] bonus_enabled toggle
-  - [ ] bonus_minutes (converted to seconds in DB)
-  - [ ] bonus_streak_target (default 1)
-- [ ] AI panels (read-only from DB):
-  - [ ] read latest `ai_insights` for child+app over last 7 days
-  - [ ] display suggested limit + bullet insights array
-  - [ ] handle empty state gracefully
-
-**Verify**
-
-- [ ] Saving limits updates remaining time back on Usage tab
-- [ ] Bonus fields persist correctly
-- [ ] AI panel renders without errors even if empty
-
----
-
-## Phase 6 — Parent Analytics Tab
-
-- [ ] Analytics tab KPIs:
-  - [ ] average time usage (interval filter)
-  - [ ] most used app
-  - [ ] most used category
-  - [ ] overuse days count (simple logic)
-- [ ] Filters:
-  - [ ] day/week/month
-  - [ ] category filter
-- [ ] Charts/Lists:
-  - [ ] Pie chart: category distribution
-  - [ ] Top 5 apps list
-  - [ ] Most screen time per day of week (Sun–Sat)
-  - [ ] Time most active:
-    - [ ] if hourly table exists: compute peak hour/range
-    - [ ] else: compute simple estimate or omit visualization but keep value
-- [ ] AI Insights summary:
-  - [ ] display child-level `ai_insights` (package_name is null)
-
-**Verify**
-
-- [ ] Filters update KPIs and charts correctly
-- [ ] Analytics loads fast for 7–30 days of data
-
----
-
-## Phase 7 — Child Module Screens (Home + Analytics)
-
-- [ ] Child Home:
-  - [ ] list apps with usage today, limit, remaining time, progress bar
-- [ ] Child Analytics:
-  - [ ] KPIs: average trend, most used app, simple behavior label
-  - [ ] Pie chart: category distribution
-  - [ ] Bar chart: day/week/month totals
-- [ ] Ensure queries are RLS-safe (child sees only own records)
-
-**Verify**
-
-- [ ] Child cannot read other children’s data
-- [ ] Values match parent views for same child
-
----
-
-## Phase 8 — Child Device Screen-Time Sync (Android MVP)
-
-- [ ] Android permission flow: Usage Access (UsageStatsManager)
-- [ ] Collect today’s per-app total seconds (MVP)
-- [ ] Batch upsert to `app_usage_daily`:
-  - [ ] include `child_id`, `package_name`, `usage_date`, `total_seconds`, `open_count?`, `device_id`
-- [ ] Upsert/update `child_apps` metadata:
-  - [ ] `package_name`, `app_name`, default category `other`
-- [ ] Sync triggers:
-  - [ ] on Child Home mount (on app open)
-  - [ ] optional periodic sync while app is open (30–60 mins)
-
-**Verify**
-
-- [ ] Usage rows appear in DB after sync
-- [ ] Parent sees updated usage after refresh
-- [ ] Sync uses batch upsert (no per-second logging)
-
----
-
-## Phase 9 — Stabilization + Demo Readiness
-
-- [ ] Error handling for all network calls (friendly messages)
-- [ ] Loading states for all queries (skeleton/spinner)
-- [ ] Add `docs/DEMO_STEPS.md` (end-to-end demo script)
-- [ ] Add `docs/TEST_CHECKLIST.md` (manual test cases)
-- [ ] Confirm indexes cover common queries (child_id + date)
-- [ ] Final smoke test:
-  - [ ] Parent: login → add child → usage → set limit → analytics
-  - [ ] Child: login → grant permission → sync → view home/analytics
-
-**Verify**
-
-- [ ] End-to-end demo completes without crashes
-- [ ] RLS confirmed working
-- [ ] App matches minimal screen list exactly
+## Phase 7: Hardening and docs
+- [ ] Error handling and loading states
+- [ ] `docs/DEMO_STEPS.md`
+- [ ] `docs/TEST_CHECKLIST.md`
