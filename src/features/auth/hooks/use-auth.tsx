@@ -7,6 +7,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { Platform } from "react-native";
+import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
 import type { Session } from "@supabase/supabase-js";
 
 import { supabase } from "@/lib/supabase";
@@ -23,12 +26,17 @@ type SignUpResult = {
   needsConfirmation: boolean;
 };
 
+type OAuthResult = {
+  error: string | null;
+};
+
 type AuthContextValue = {
   session: Session | null;
   profile: ProfileRow | null;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<SignInResult>;
   signUp: (email: string, password: string, displayName: string) => Promise<SignUpResult>;
+  signInWithGoogle: () => Promise<OAuthResult>;
   signOut: () => Promise<void>;
 };
 
@@ -61,7 +69,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    setProfile(data ?? null);
+    if (!data) {
+      const metadata = nextSession.user.user_metadata ?? {};
+      const displayName =
+        metadata.full_name ??
+        metadata.name ??
+        metadata.display_name ??
+        null;
+      const normalizedDisplayName =
+        typeof displayName === "string" && displayName.trim().length > 0
+          ? displayName.trim()
+          : null;
+
+      const { data: profileRow, error: insertError } = await supabase
+        .from("profiles")
+        .insert({
+          user_id: nextSession.user.id,
+          role: "parent",
+          display_name: normalizedDisplayName,
+        })
+        .select("*")
+        .single();
+
+      if (insertError) {
+        setProfile(null);
+        setIsLoading(false);
+        return;
+      }
+
+      setProfile(profileRow);
+      setIsLoading(false);
+      return;
+    }
+
+    setProfile(data);
     setIsLoading(false);
   }, []);
 
@@ -101,9 +142,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signUp = useCallback(async (email: string, password: string, displayName: string) => {
+    const normalizedName = displayName.trim();
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
+      ...(normalizedName.length > 0
+        ? { options: { data: { full_name: normalizedName } } }
+        : {}),
     });
 
     if (error) {
@@ -113,7 +158,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const needsConfirmation = !data.session;
 
     if (data.session?.user) {
-      const normalizedName = displayName.trim();
       const { data: profileRow, error: profileError } = await supabase
         .from("profiles")
         .insert({
@@ -134,6 +178,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: null, needsConfirmation };
   }, []);
 
+  const signInWithGoogle = useCallback(async () => {
+    const redirectTo = Linking.createURL("/(auth)/login");
+    const oauthOptions =
+      Platform.OS === "web"
+        ? { redirectTo }
+        : { redirectTo, skipBrowserRedirect: true };
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: oauthOptions,
+    });
+
+    if (error) {
+      return { error: error.message };
+    }
+
+    if (Platform.OS === "web") {
+      return { error: null };
+    }
+
+    if (!data?.url) {
+      return { error: "Unable to start Google sign-in." };
+    }
+
+    const result = await WebBrowser.openAuthSessionAsync(
+      data.url,
+      redirectTo
+    );
+
+    if (result.type !== "success" || !result.url) {
+      return { error: null };
+    }
+
+    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(
+      result.url
+    );
+    if (exchangeError) {
+      return { error: exchangeError.message };
+    }
+
+    return { error: null };
+  }, []);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
   }, []);
@@ -145,9 +232,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       signIn,
       signUp,
+      signInWithGoogle,
       signOut,
     }),
-    [session, profile, isLoading, signIn, signUp, signOut]
+    [session, profile, isLoading, signIn, signUp, signInWithGoogle, signOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
