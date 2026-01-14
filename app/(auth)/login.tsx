@@ -12,6 +12,8 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Controller, useForm } from "react-hook-form";
+import { z } from "zod";
 
 import { useAuth } from "@/src/features/auth/hooks/use-auth";
 
@@ -29,31 +31,43 @@ const COLORS = {
   errorLight: "#FEF2F2",
 };
 
+const loginSchema = z.object({
+  email: z
+    .string()
+    .trim()
+    .min(1, "Email is required.")
+    .email("Enter a valid email."),
+  password: z.string().min(1, "Password is required."),
+});
+
+type LoginFormValues = z.infer<typeof loginSchema>;
+
 export default function LoginScreen() {
   const { signIn } = useAuth();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const {
+    control,
+    handleSubmit,
+    setError,
+    clearErrors,
+    formState: { errors, isSubmitting },
+  } = useForm<LoginFormValues>({
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+    mode: "onTouched",
+  });
   const [showPassword, setShowPassword] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
 
-  const handleLogin = async () => {
-    setErrorMessage(null);
-    setIsSubmitting(true);
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail || !password) {
-      setErrorMessage("Email and password are required.");
-      setIsSubmitting(false);
-      return;
-    }
-    const { error } = await signIn(trimmedEmail, password);
+  const handleLogin = handleSubmit(async (values) => {
+    clearErrors("root");
+    const { error } = await signIn(values.email.trim(), values.password);
     if (error) {
-      setErrorMessage(error);
+      setError("root", { message: error });
     }
-    setIsSubmitting(false);
-  };
+  });
 
   return (
     <KeyboardAvoidingView
@@ -86,6 +100,7 @@ export default function LoginScreen() {
                   style={[
                     styles.inputContainer,
                     emailFocused && styles.inputContainerFocused,
+                    errors.email && styles.inputContainerError,
                   ]}
                 >
                   <Ionicons
@@ -94,19 +109,42 @@ export default function LoginScreen() {
                     color={emailFocused ? COLORS.primary : COLORS.textSecondary}
                     style={styles.inputIcon}
                   />
-                  <TextInput
-                    autoCapitalize="none"
-                    autoComplete="email"
-                    keyboardType="email-address"
-                    placeholder="you@example.com"
-                    placeholderTextColor={COLORS.textSecondary}
-                    style={styles.input}
-                    value={email}
-                    onChangeText={setEmail}
-                    onFocus={() => setEmailFocused(true)}
-                    onBlur={() => setEmailFocused(false)}
+                  <Controller
+                    control={control}
+                    name="email"
+                    rules={{
+                      validate: (value) => {
+                        const result = loginSchema.shape.email.safeParse(value);
+                        return (
+                          result.success || result.error.issues[0]?.message
+                        );
+                      },
+                    }}
+                    render={({ field: { onChange, onBlur, value } }) => (
+                      <TextInput
+                        autoCapitalize="none"
+                        autoComplete="email"
+                        keyboardType="email-address"
+                        placeholder="you@example.com"
+                        placeholderTextColor={COLORS.textSecondary}
+                        style={styles.input}
+                        value={value}
+                        onChangeText={(text) => {
+                          onChange(text);
+                          clearErrors("root");
+                        }}
+                        onFocus={() => setEmailFocused(true)}
+                        onBlur={() => {
+                          onBlur();
+                          setEmailFocused(false);
+                        }}
+                      />
+                    )}
                   />
                 </View>
+                {errors.email?.message ? (
+                  <Text style={styles.fieldError}>{errors.email.message}</Text>
+                ) : null}
               </View>
 
               {/* Password Input */}
@@ -116,6 +154,7 @@ export default function LoginScreen() {
                   style={[
                     styles.inputContainer,
                     passwordFocused && styles.inputContainerFocused,
+                    errors.password && styles.inputContainerError,
                   ]}
                 >
                   <Ionicons
@@ -126,17 +165,39 @@ export default function LoginScreen() {
                     }
                     style={styles.inputIcon}
                   />
-                  <TextInput
-                    autoCapitalize="none"
-                    autoComplete="password"
-                    placeholder="••••••••"
-                    placeholderTextColor={COLORS.textSecondary}
-                    secureTextEntry={!showPassword}
-                    style={styles.input}
-                    value={password}
-                    onChangeText={setPassword}
-                    onFocus={() => setPasswordFocused(true)}
-                    onBlur={() => setPasswordFocused(false)}
+                  <Controller
+                    control={control}
+                    name="password"
+                    rules={{
+                      validate: (value) => {
+                        const result = loginSchema.shape.password.safeParse(
+                          value
+                        );
+                        return (
+                          result.success || result.error.issues[0]?.message
+                        );
+                      },
+                    }}
+                    render={({ field: { onChange, onBlur, value } }) => (
+                      <TextInput
+                        autoCapitalize="none"
+                        autoComplete="password"
+                        placeholder="Password"
+                        placeholderTextColor={COLORS.textSecondary}
+                        secureTextEntry={!showPassword}
+                        style={styles.input}
+                        value={value}
+                        onChangeText={(text) => {
+                          onChange(text);
+                          clearErrors("root");
+                        }}
+                        onFocus={() => setPasswordFocused(true)}
+                        onBlur={() => {
+                          onBlur();
+                          setPasswordFocused(false);
+                        }}
+                      />
+                    )}
                   />
                   <Pressable
                     onPress={() => setShowPassword(!showPassword)}
@@ -150,17 +211,21 @@ export default function LoginScreen() {
                     />
                   </Pressable>
                 </View>
+                {errors.password?.message ? (
+                  <Text style={styles.fieldError}>
+                    {errors.password.message}
+                  </Text>
+                ) : null}
               </View>
-
               {/* Error Message */}
-              {errorMessage ? (
+              {errors.root?.message ? (
                 <View style={styles.errorContainer}>
                   <Ionicons
                     name="alert-circle"
                     size={16}
                     color={COLORS.error}
                   />
-                  <Text style={styles.errorText}>{errorMessage}</Text>
+                  <Text style={styles.errorText}>{errors.root.message}</Text>
                 </View>
               ) : null}
 
@@ -355,6 +420,9 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
     borderWidth: 1.5,
   },
+  inputContainerError: {
+    borderColor: COLORS.error,
+  },
   inputIcon: {
     marginRight: 10,
   },
@@ -367,6 +435,11 @@ const styles = StyleSheet.create({
   },
   eyeButton: {
     padding: 4,
+  },
+  fieldError: {
+    fontSize: 12,
+    color: COLORS.error,
+    fontFamily: "Inter_500Medium",
   },
   errorContainer: {
     flexDirection: "row",
