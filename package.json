@@ -12,11 +12,12 @@
     "supabase:types": "supabase gen types typescript --linked > types/database-types.ts"
   },
   "dependencies": {
+    "@expo-google-fonts/inter": "^0.4.2",
     "@expo/vector-icons": "^15.0.3",
+    "@react-native-async-storage/async-storage": "^1.23.1",
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
-    "@react-native-async-storage/async-storage": "^1.23.1",
     "@supabase/supabase-js": "^2.90.1",
     "@tanstack/react-query": "^5.90.16",
     "expo": "~54.0.31",
