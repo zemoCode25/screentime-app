@@ -5,18 +5,13 @@ import {
   Inter_700Bold,
   useFonts,
 } from "@expo-google-fonts/inter";
-import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
-} from "@react-navigation/native";
+import { DefaultTheme, ThemeProvider } from "@react-navigation/native";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import "react-native-reanimated";
 
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { AuthGate } from "@/src/features/auth/components/auth-gate";
 import { AuthProvider } from "@/src/features/auth/hooks/use-auth";
 
@@ -28,7 +23,6 @@ export const unstable_settings = {
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const [loaded, error] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -50,18 +44,32 @@ export default function RootLayout() {
     return null;
   }
 
+  const lightTheme = {
+    ...DefaultTheme,
+    colors: {
+      ...DefaultTheme.colors,
+      background: "#FFFFFF",
+      card: "#FFFFFF",
+    },
+  };
+
   return (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={lightTheme}>
       <AuthProvider>
         <AuthGate>
-          <Stack>
-            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-            <Stack.Screen name="(parent)" options={{ headerShown: false }} />
-            <Stack.Screen name="(child)" options={{ headerShown: false }} />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: "#FFFFFF" },
+            }}
+          >
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(parent)" />
+            <Stack.Screen name="(child)" />
           </Stack>
         </AuthGate>
       </AuthProvider>
-      <StatusBar style="auto" />
+      <StatusBar style="dark" backgroundColor="#FFFFFF" />
     </ThemeProvider>
   );
 }

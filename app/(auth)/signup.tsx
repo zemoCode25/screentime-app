@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Link } from "expo-router";
 import { useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -12,6 +13,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { z } from "zod";
 
 import { useAuth } from "@/src/features/auth/hooks/use-auth";
 
@@ -31,44 +33,59 @@ const COLORS = {
   successLight: "#D1FAE5",
 };
 
+const signupSchema = z.object({
+  displayName: z.string().trim().optional(),
+  email: z
+    .string()
+    .trim()
+    .min(1, "Email is required.")
+    .email("Enter a valid email."),
+  password: z.string().min(1, "Password is required."),
+});
+
+type SignupFormValues = z.infer<typeof signupSchema>;
+
 export default function SignupScreen() {
   const { signUp } = useAuth();
-  const [displayName, setDisplayName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const {
+    control,
+    handleSubmit,
+    setError,
+    clearErrors,
+    formState: { errors, isSubmitting },
+  } = useForm<SignupFormValues>({
+    defaultValues: {
+      displayName: "",
+      email: "",
+      password: "",
+    },
+    mode: "onTouched",
+  });
   const [showPassword, setShowPassword] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Focus states
   const [nameFocused, setNameFocused] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
 
-  const handleSignup = async () => {
-    setErrorMessage(null);
+  const handleSignup = handleSubmit(async (values) => {
+    clearErrors("root");
     setNoticeMessage(null);
-    setIsSubmitting(true);
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail || !password) {
-      setErrorMessage("Email and password are required.");
-      setIsSubmitting(false);
-      return;
-    }
+    const normalizedName = values.displayName?.trim() ?? "";
     const { error, needsConfirmation } = await signUp(
-      trimmedEmail,
-      password,
-      displayName
+      values.email.trim(),
+      values.password,
+      normalizedName
     );
     if (error) {
-      setErrorMessage(error);
+      setError("root", { message: error });
+      return;
     }
     if (needsConfirmation) {
       setNoticeMessage("Check your email to confirm your account.");
     }
-    setIsSubmitting(false);
-  };
+  });
 
   return (
     <KeyboardAvoidingView
@@ -77,7 +94,7 @@ export default function SignupScreen() {
     >
       <ScrollView
         contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+        keyboardShouldPersistTaps="always"
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.container}>
@@ -101,6 +118,7 @@ export default function SignupScreen() {
                   style={[
                     styles.inputContainer,
                     nameFocused && styles.inputContainerFocused,
+                    errors.displayName && styles.inputContainerError,
                   ]}
                 >
                   <Ionicons
@@ -109,18 +127,45 @@ export default function SignupScreen() {
                     color={nameFocused ? COLORS.primary : COLORS.textSecondary}
                     style={styles.inputIcon}
                   />
-                  <TextInput
-                    autoCapitalize="words"
-                    autoComplete="name"
-                    placeholder="Parent Name"
-                    placeholderTextColor={COLORS.textSecondary}
-                    style={styles.input}
-                    value={displayName}
-                    onChangeText={setDisplayName}
-                    onFocus={() => setNameFocused(true)}
-                    onBlur={() => setNameFocused(false)}
+                  <Controller
+                    control={control}
+                    name="displayName"
+                    rules={{
+                      validate: (value) => {
+                        const result =
+                          signupSchema.shape.displayName.safeParse(value);
+                        return (
+                          result.success || result.error.issues[0]?.message
+                        );
+                      },
+                    }}
+                    render={({ field: { onChange, onBlur, value } }) => (
+                      <TextInput
+                        autoCapitalize="words"
+                        autoComplete="name"
+                        placeholder="Parent Name"
+                        placeholderTextColor={COLORS.textSecondary}
+                        style={styles.input}
+                        value={value ?? ""}
+                        onChangeText={(text) => {
+                          onChange(text);
+                          clearErrors("root");
+                          setNoticeMessage(null);
+                        }}
+                        onFocus={() => setNameFocused(true)}
+                        onBlur={() => {
+                          onBlur();
+                          setNameFocused(false);
+                        }}
+                      />
+                    )}
                   />
                 </View>
+                {errors.displayName?.message ? (
+                  <Text style={styles.fieldError}>
+                    {errors.displayName.message}
+                  </Text>
+                ) : null}
               </View>
 
               {/* Email Input */}
@@ -130,6 +175,7 @@ export default function SignupScreen() {
                   style={[
                     styles.inputContainer,
                     emailFocused && styles.inputContainerFocused,
+                    errors.email && styles.inputContainerError,
                   ]}
                 >
                   <Ionicons
@@ -138,19 +184,44 @@ export default function SignupScreen() {
                     color={emailFocused ? COLORS.primary : COLORS.textSecondary}
                     style={styles.inputIcon}
                   />
-                  <TextInput
-                    autoCapitalize="none"
-                    autoComplete="email"
-                    keyboardType="email-address"
-                    placeholder="you@example.com"
-                    placeholderTextColor={COLORS.textSecondary}
-                    style={styles.input}
-                    value={email}
-                    onChangeText={setEmail}
-                    onFocus={() => setEmailFocused(true)}
-                    onBlur={() => setEmailFocused(false)}
+                  <Controller
+                    control={control}
+                    name="email"
+                    rules={{
+                      validate: (value) => {
+                        const result =
+                          signupSchema.shape.email.safeParse(value);
+                        return (
+                          result.success || result.error.issues[0]?.message
+                        );
+                      },
+                    }}
+                    render={({ field: { onChange, onBlur, value } }) => (
+                      <TextInput
+                        autoCapitalize="none"
+                        autoComplete="email"
+                        keyboardType="email-address"
+                        placeholder="you@example.com"
+                        placeholderTextColor={COLORS.textSecondary}
+                        style={styles.input}
+                        value={value}
+                        onChangeText={(text) => {
+                          onChange(text);
+                          clearErrors("root");
+                          setNoticeMessage(null);
+                        }}
+                        onFocus={() => setEmailFocused(true)}
+                        onBlur={() => {
+                          onBlur();
+                          setEmailFocused(false);
+                        }}
+                      />
+                    )}
                   />
                 </View>
+                {errors.email?.message ? (
+                  <Text style={styles.fieldError}>{errors.email.message}</Text>
+                ) : null}
               </View>
 
               {/* Password Input */}
@@ -160,6 +231,7 @@ export default function SignupScreen() {
                   style={[
                     styles.inputContainer,
                     passwordFocused && styles.inputContainerFocused,
+                    errors.password && styles.inputContainerError,
                   ]}
                 >
                   <Ionicons
@@ -170,17 +242,39 @@ export default function SignupScreen() {
                     }
                     style={styles.inputIcon}
                   />
-                  <TextInput
-                    autoCapitalize="none"
-                    autoComplete="password"
-                    placeholder="Create a password"
-                    placeholderTextColor={COLORS.textSecondary}
-                    secureTextEntry={!showPassword}
-                    style={styles.input}
-                    value={password}
-                    onChangeText={setPassword}
-                    onFocus={() => setPasswordFocused(true)}
-                    onBlur={() => setPasswordFocused(false)}
+                  <Controller
+                    control={control}
+                    name="password"
+                    rules={{
+                      validate: (value) => {
+                        const result =
+                          signupSchema.shape.password.safeParse(value);
+                        return (
+                          result.success || result.error.issues[0]?.message
+                        );
+                      },
+                    }}
+                    render={({ field: { onChange, onBlur, value } }) => (
+                      <TextInput
+                        autoCapitalize="none"
+                        autoComplete="password"
+                        placeholder="Create a password"
+                        placeholderTextColor={COLORS.textSecondary}
+                        secureTextEntry={!showPassword}
+                        style={styles.input}
+                        value={value}
+                        onChangeText={(text) => {
+                          onChange(text);
+                          clearErrors("root");
+                          setNoticeMessage(null);
+                        }}
+                        onFocus={() => setPasswordFocused(true)}
+                        onBlur={() => {
+                          onBlur();
+                          setPasswordFocused(false);
+                        }}
+                      />
+                    )}
                   />
                   <Pressable
                     onPress={() => setShowPassword(!showPassword)}
@@ -194,17 +288,22 @@ export default function SignupScreen() {
                     />
                   </Pressable>
                 </View>
+                {errors.password?.message ? (
+                  <Text style={styles.fieldError}>
+                    {errors.password.message}
+                  </Text>
+                ) : null}
               </View>
 
               {/* Error Message */}
-              {errorMessage ? (
+              {errors.root?.message ? (
                 <View style={styles.errorContainer}>
                   <Ionicons
                     name="alert-circle"
                     size={16}
                     color={COLORS.error}
                   />
-                  <Text style={styles.errorText}>{errorMessage}</Text>
+                  <Text style={styles.errorText}>{errors.root.message}</Text>
                 </View>
               ) : null}
 
@@ -252,9 +351,7 @@ export default function SignupScreen() {
                 pressed && styles.googleButtonPressed,
               ]}
             >
-              <View style={styles.googleIconContainer}>
-                <Text style={styles.googleIcon}>G</Text>
-              </View>
+              <Ionicons name="logo-google" size={20} color={COLORS.text} />
               <Text style={styles.googleButtonText}>Continue with Google</Text>
             </Pressable>
 
@@ -349,20 +446,6 @@ const styles = StyleSheet.create({
   googleButtonPressed: {
     backgroundColor: COLORS.surface,
   },
-  googleIconContainer: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    backgroundColor: COLORS.background,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  googleIcon: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#4285F4",
-    fontFamily: "Inter_700Bold",
-  },
   googleButtonText: {
     fontSize: 14,
     fontWeight: "500",
@@ -411,6 +494,9 @@ const styles = StyleSheet.create({
     borderColor: COLORS.primary,
     borderWidth: 1.5,
   },
+  inputContainerError: {
+    borderColor: COLORS.error,
+  },
   inputIcon: {
     marginRight: 10,
   },
@@ -423,6 +509,11 @@ const styles = StyleSheet.create({
   },
   eyeButton: {
     padding: 4,
+  },
+  fieldError: {
+    fontSize: 12,
+    color: COLORS.error,
+    fontFamily: "Inter_500Medium",
   },
   errorContainer: {
     flexDirection: "row",

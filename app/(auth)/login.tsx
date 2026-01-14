@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Link } from "expo-router";
 import { useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -12,7 +13,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { useAuth } from "@/src/features/auth/hooks/use-auth";
@@ -76,7 +76,7 @@ export default function LoginScreen() {
     >
       <ScrollView
         contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+        keyboardShouldPersistTaps="always"
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.container}>
@@ -170,9 +170,8 @@ export default function LoginScreen() {
                     name="password"
                     rules={{
                       validate: (value) => {
-                        const result = loginSchema.shape.password.safeParse(
-                          value
-                        );
+                        const result =
+                          loginSchema.shape.password.safeParse(value);
                         return (
                           result.success || result.error.issues[0]?.message
                         );
@@ -261,9 +260,7 @@ export default function LoginScreen() {
                 pressed && styles.googleButtonPressed,
               ]}
             >
-              <View style={styles.googleIconContainer}>
-                <Text style={styles.googleIcon}>G</Text>
-              </View>
+              <Ionicons name="logo-google" size={20} color={COLORS.text} />
               <Text style={styles.googleButtonText}>Continue with Google</Text>
             </Pressable>
 
@@ -357,20 +354,6 @@ const styles = StyleSheet.create({
   },
   googleButtonPressed: {
     backgroundColor: COLORS.surface,
-  },
-  googleIconContainer: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    backgroundColor: COLORS.background,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  googleIcon: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#4285F4",
-    fontFamily: "Inter_700Bold",
   },
   googleButtonText: {
     fontSize: 14,
