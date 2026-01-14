@@ -19,12 +19,10 @@ This document defines request and response shapes for Supabase usage. It is the 
 ### profiles
 ```json
 {
-  "id": "uuid",
-  "email": "string | null",
+  "user_id": "uuid",
   "role": "parent | child",
   "display_name": "string | null",
-  "created_at": "timestamp",
-  "updated_at": "timestamp"
+  "created_at": "timestamp"
 }
 ```
 

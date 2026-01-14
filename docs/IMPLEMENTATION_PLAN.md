@@ -67,24 +67,31 @@ Verify
 - [ ] No logic changes; only file moves and layout setup
 
 ## Phase 2: Data model and RLS (current)
-- [ ] Apply schema in `docs/DB_SCHEMA.sql`
+- [x] Apply schema in `docs/DB_SCHEMA.sql` (applied in Supabase)
 - [ ] Regenerate `types/database-types.ts`
 - [ ] Verify RLS policies for parent and child access
+- [x] Add `docs/RLS_TESTS.sql` for manual verification
 
 Verify
+- [ ] Run `docs/RLS_TESTS.sql` in Supabase SQL editor
 - [ ] Parent reads and writes only their children
 - [ ] Child reads only their own data
 - [ ] Usage and limits upsert safely
 
 ## Phase 3: Auth and session
-- [ ] Parent and child auth flows
-- [ ] Role-based routing after login
-- [ ] Session restore and sign out
+- [x] Define auth session state (Supabase session + profile row)
+- [x] Build signup flow that creates auth user and `profiles` row (role + display_name)
+- [x] Build login flow and load profile role after auth
+- [x] Add auth guard + role-based routing to parent/child route groups
+- [x] Implement session restore on app start with loading state
+- [x] Add sign out action and clear session/profile state
 
 Verify
-- [ ] Parent lands on parent home
-- [ ] Child lands on child home
-- [ ] Sign out returns to auth flow
+- [ ] Parent login lands on parent home
+- [ ] Child login lands on child home
+- [ ] Restored session routes to the correct home
+- [ ] Unauthorized routes redirect to auth flow
+- [ ] Sign out returns to auth flow and clears protected data
 
 ## Phase 4: Parent flows
 - [ ] Parent home with child list

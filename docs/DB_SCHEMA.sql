@@ -20,12 +20,10 @@ create type if not exists app_category as enum (
 
 -- Core tables
 create table if not exists public.profiles (
-  id uuid primary key references auth.users(id) on delete cascade,
-  email text,
+  user_id uuid primary key references auth.users(id) on delete cascade,
   role user_role not null,
   display_name text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  created_at timestamptz not null default now()
 );
 
 create table if not exists public.children (
@@ -116,10 +114,7 @@ begin
 end;
 $$ language plpgsql;
 
-drop trigger if exists set_updated_at_profiles on public.profiles;
-create trigger set_updated_at_profiles
-before update on public.profiles
-for each row execute function public.set_updated_at();
+
 
 drop trigger if exists set_updated_at_children on public.children;
 create trigger set_updated_at_children
@@ -168,13 +163,13 @@ alter table public.ai_insights enable row level security;
 
 -- Profiles: user can read and edit their own row
 create policy "profiles_select_own" on public.profiles
-for select using (id = auth.uid());
+for select using (user_id = auth.uid());
 
 create policy "profiles_insert_own" on public.profiles
-for insert with check (id = auth.uid());
+for insert with check (user_id = auth.uid());
 
 create policy "profiles_update_own" on public.profiles
-for update using (id = auth.uid());
+for update using (user_id = auth.uid());
 
 -- Children: parent can CRUD, child can read their own row
 create policy "children_select_parent_or_child" on public.children
