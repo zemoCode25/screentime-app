@@ -9,7 +9,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "supabase:types": "supabase gen types typescript --linked > src/types/database-types.ts"
+    "supabase:types": "supabase gen types typescript --linked > types/database-types.ts"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

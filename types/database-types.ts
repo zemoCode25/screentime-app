@@ -39,7 +39,339 @@ export type Database = {
   };
   public: {
     Tables: {
-      [_ in never]: never;
+      ai_insights: {
+        Row: {
+          child_id: string;
+          created_at: string;
+          id: string;
+          insights: string[];
+          package_name: string | null;
+          period_end: string;
+          period_start: string;
+          suggested_limit_seconds: number | null;
+        };
+        Insert: {
+          child_id: string;
+          created_at?: string;
+          id?: string;
+          insights?: string[];
+          package_name?: string | null;
+          period_end: string;
+          period_start: string;
+          suggested_limit_seconds?: number | null;
+        };
+        Update: {
+          child_id?: string;
+          created_at?: string;
+          id?: string;
+          insights?: string[];
+          package_name?: string | null;
+          period_end?: string;
+          period_start?: string;
+          suggested_limit_seconds?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ai_insights_child_id_fkey";
+            columns: ["child_id"];
+            isOneToOne: false;
+            referencedRelation: "children";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      app_limits: {
+        Row: {
+          applies_fri: boolean;
+          applies_mon: boolean;
+          applies_sat: boolean;
+          applies_sun: boolean;
+          applies_thu: boolean;
+          applies_tue: boolean;
+          applies_wed: boolean;
+          bonus_enabled: boolean;
+          bonus_seconds: number;
+          bonus_streak_target: number;
+          child_id: string;
+          created_at: string;
+          id: string;
+          limit_seconds: number;
+          package_name: string;
+          updated_at: string;
+        };
+        Insert: {
+          applies_fri?: boolean;
+          applies_mon?: boolean;
+          applies_sat?: boolean;
+          applies_sun?: boolean;
+          applies_thu?: boolean;
+          applies_tue?: boolean;
+          applies_wed?: boolean;
+          bonus_enabled?: boolean;
+          bonus_seconds?: number;
+          bonus_streak_target?: number;
+          child_id: string;
+          created_at?: string;
+          id?: string;
+          limit_seconds: number;
+          package_name: string;
+          updated_at?: string;
+        };
+        Update: {
+          applies_fri?: boolean;
+          applies_mon?: boolean;
+          applies_sat?: boolean;
+          applies_sun?: boolean;
+          applies_thu?: boolean;
+          applies_tue?: boolean;
+          applies_wed?: boolean;
+          bonus_enabled?: boolean;
+          bonus_seconds?: number;
+          bonus_streak_target?: number;
+          child_id?: string;
+          created_at?: string;
+          id?: string;
+          limit_seconds?: number;
+          package_name?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "app_limits_child_id_fkey";
+            columns: ["child_id"];
+            isOneToOne: false;
+            referencedRelation: "children";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      app_usage_daily: {
+        Row: {
+          child_id: string;
+          created_at: string;
+          device_id: string | null;
+          id: string;
+          last_synced_at: string;
+          open_count: number;
+          package_name: string;
+          total_seconds: number;
+          usage_date: string;
+        };
+        Insert: {
+          child_id: string;
+          created_at?: string;
+          device_id?: string | null;
+          id?: string;
+          last_synced_at?: string;
+          open_count?: number;
+          package_name: string;
+          total_seconds?: number;
+          usage_date: string;
+        };
+        Update: {
+          child_id?: string;
+          created_at?: string;
+          device_id?: string | null;
+          id?: string;
+          last_synced_at?: string;
+          open_count?: number;
+          package_name?: string;
+          total_seconds?: number;
+          usage_date?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "app_usage_daily_child_id_fkey";
+            columns: ["child_id"];
+            isOneToOne: false;
+            referencedRelation: "children";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      app_usage_hourly: {
+        Row: {
+          child_id: string;
+          created_at: string;
+          device_id: string | null;
+          hour: number;
+          id: string;
+          last_synced_at: string;
+          package_name: string;
+          total_seconds: number;
+          usage_date: string;
+        };
+        Insert: {
+          child_id: string;
+          created_at?: string;
+          device_id?: string | null;
+          hour: number;
+          id?: string;
+          last_synced_at?: string;
+          package_name: string;
+          total_seconds?: number;
+          usage_date: string;
+        };
+        Update: {
+          child_id?: string;
+          created_at?: string;
+          device_id?: string | null;
+          hour?: number;
+          id?: string;
+          last_synced_at?: string;
+          package_name?: string;
+          total_seconds?: number;
+          usage_date?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "app_usage_hourly_child_id_fkey";
+            columns: ["child_id"];
+            isOneToOne: false;
+            referencedRelation: "children";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      child_apps: {
+        Row: {
+          app_name: string;
+          category: Database["public"]["Enums"]["app_category"];
+          child_id: string;
+          created_at: string;
+          icon_path: string | null;
+          id: string;
+          package_name: string;
+        };
+        Insert: {
+          app_name: string;
+          category?: Database["public"]["Enums"]["app_category"];
+          child_id: string;
+          created_at?: string;
+          icon_path?: string | null;
+          id?: string;
+          package_name: string;
+        };
+        Update: {
+          app_name?: string;
+          category?: Database["public"]["Enums"]["app_category"];
+          child_id?: string;
+          created_at?: string;
+          icon_path?: string | null;
+          id?: string;
+          package_name?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "child_apps_child_id_fkey";
+            columns: ["child_id"];
+            isOneToOne: false;
+            referencedRelation: "children";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      child_devices: {
+        Row: {
+          child_id: string;
+          device_id: string;
+          first_seen_at: string;
+          id: string;
+          is_active: boolean;
+          last_seen_at: string | null;
+          model: string | null;
+          os_version: string | null;
+          platform: string;
+        };
+        Insert: {
+          child_id: string;
+          device_id: string;
+          first_seen_at?: string;
+          id?: string;
+          is_active?: boolean;
+          last_seen_at?: string | null;
+          model?: string | null;
+          os_version?: string | null;
+          platform?: string;
+        };
+        Update: {
+          child_id?: string;
+          device_id?: string;
+          first_seen_at?: string;
+          id?: string;
+          is_active?: boolean;
+          last_seen_at?: string | null;
+          model?: string | null;
+          os_version?: string | null;
+          platform?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "child_devices_child_id_fkey";
+            columns: ["child_id"];
+            isOneToOne: false;
+            referencedRelation: "children";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      children: {
+        Row: {
+          age: number;
+          child_user_id: string | null;
+          created_at: string;
+          grade_level: string | null;
+          id: string;
+          interests: string[];
+          motivations: Database["public"]["Enums"]["motivation_type"][];
+          name: string;
+          parent_user_id: string;
+        };
+        Insert: {
+          age: number;
+          child_user_id?: string | null;
+          created_at?: string;
+          grade_level?: string | null;
+          id?: string;
+          interests?: string[];
+          motivations?: Database["public"]["Enums"]["motivation_type"][];
+          name: string;
+          parent_user_id: string;
+        };
+        Update: {
+          age?: number;
+          child_user_id?: string | null;
+          created_at?: string;
+          grade_level?: string | null;
+          id?: string;
+          interests?: string[];
+          motivations?: Database["public"]["Enums"]["motivation_type"][];
+          name?: string;
+          parent_user_id?: string;
+        };
+        Relationships: [];
+      };
+      profiles: {
+        Row: {
+          created_at: string;
+          display_name: string | null;
+          role: Database["public"]["Enums"]["user_role"];
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          display_name?: string | null;
+          role: Database["public"]["Enums"]["user_role"];
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          display_name?: string | null;
+          role?: Database["public"]["Enums"]["user_role"];
+          user_id?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -48,7 +380,27 @@ export type Database = {
       [_ in never]: never;
     };
     Enums: {
-      [_ in never]: never;
+      app_category:
+        | "education"
+        | "games"
+        | "video"
+        | "social"
+        | "creativity"
+        | "productivity"
+        | "communication"
+        | "utilities"
+        | "other";
+      motivation_type:
+        | "entertainment_videos"
+        | "gaming"
+        | "learning_education"
+        | "social_communication"
+        | "creativity"
+        | "habit_boredom"
+        | "relaxation_stress_relief"
+        | "rewards_achievements"
+        | "other";
+      user_role: "parent" | "child";
     };
     CompositeTypes: {
       [_ in never]: never;
@@ -181,6 +533,30 @@ export const Constants = {
     Enums: {},
   },
   public: {
-    Enums: {},
+    Enums: {
+      app_category: [
+        "education",
+        "games",
+        "video",
+        "social",
+        "creativity",
+        "productivity",
+        "communication",
+        "utilities",
+        "other",
+      ],
+      motivation_type: [
+        "entertainment_videos",
+        "gaming",
+        "learning_education",
+        "social_communication",
+        "creativity",
+        "habit_boredom",
+        "relaxation_stress_relief",
+        "rewards_achievements",
+        "other",
+      ],
+      user_role: ["parent", "child"],
+    },
   },
 } as const;
