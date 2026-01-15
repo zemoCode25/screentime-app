@@ -60,9 +60,6 @@ export default function ParentHomeScreen() {
             </View>
             <View>
               <Text style={styles.title}>Family Dashboard</Text>
-              <Text style={styles.subtitle}>
-                Welcome {profile?.display_name ?? "back"}
-              </Text>
             </View>
           </View>
 
@@ -157,11 +154,16 @@ export default function ParentHomeScreen() {
                   pressed && styles.childCardPressed,
                 ]}
               >
-                <View style={styles.childCardHeader}>
-                  <View>
+                <View style={styles.childHeaderRow}>
+                  <View style={styles.childAvatar}>
+                    <Text style={styles.childAvatarText}>
+                      {child.name.substring(0, 1).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={styles.childInfo}>
                     <Text style={styles.childName}>{child.name}</Text>
                     <Text style={styles.childMeta}>
-                      Age {child.age}
+                      {child.age} years old
                       {child.grade_level ? ` • ${child.grade_level}` : ""}
                     </Text>
                   </View>
@@ -174,26 +176,40 @@ export default function ParentHomeScreen() {
                   </View>
                 </View>
 
+                <View style={styles.divider} />
+
                 <View style={styles.statsRow}>
-                  <View style={styles.statCard}>
-                    <Text style={styles.statLabel}>Avg 30d</Text>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statLabel}>Avg Screen Time</Text>
                     <Text style={styles.statValue}>
                       {formatDuration(child.avgDailySeconds)}
                     </Text>
                   </View>
-                  <View style={styles.statCard}>
-                    <Text style={styles.statLabel}>Active days</Text>
-                    <Text style={styles.statValue}>{child.activeDays}</Text>
+                  <View style={styles.verticalDivider} />
+                  <View style={styles.statItem}>
+                    <Text style={styles.statLabel}>Active Days</Text>
+                    <Text style={styles.statValue}>
+                      {child.activeDays} days
+                    </Text>
                   </View>
                 </View>
 
-                <View style={styles.tagRow}>
-                  {child.interests.slice(0, 3).map((interest) => (
-                    <View key={interest} style={styles.tag}>
-                      <Text style={styles.tagText}>{interest}</Text>
-                    </View>
-                  ))}
-                </View>
+                {child.interests.length > 0 && (
+                  <View style={styles.tagRow}>
+                    {child.interests.slice(0, 3).map((interest) => (
+                      <View key={interest} style={styles.tag}>
+                        <Text style={styles.tagText}>{interest}</Text>
+                      </View>
+                    ))}
+                    {child.interests.length > 3 && (
+                      <View style={styles.moreTag}>
+                        <Text style={styles.moreTagText}>
+                          +{child.interests.length - 3}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
               </Pressable>
             ))
           : null}
@@ -227,7 +243,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 24,
-    paddingBottom: 100, // Extra padding for vertical limit/safe area
+    paddingBottom: 100,
     gap: 20,
   },
   header: {
@@ -235,7 +251,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 10,
-    zIndex: 10, // Ensure dropdown is on top
+    zIndex: 10,
   },
   brandRow: {
     flexDirection: "row",
@@ -255,12 +271,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: COLORS.text,
     fontFamily: "Inter_700Bold",
-  },
-  subtitle: {
-    marginTop: 2,
-    color: COLORS.textSecondary,
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
   },
   profileContainer: {
     position: "relative",
@@ -423,59 +433,87 @@ const styles = StyleSheet.create({
     maxWidth: 240,
     fontFamily: "Inter_400Regular",
   },
+
+  // Refined Child Card Styles
   childCard: {
     padding: 20,
-    borderRadius: 20,
+    borderRadius: 16,
     backgroundColor: COLORS.surface,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: "#E2E8F0",
     gap: 16,
-    shadowColor: "#000",
+    shadowColor: "#0f172a",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+    marginBottom: 4,
   },
   childCardPressed: {
-    backgroundColor: "#F8FAFC",
-    transform: [{ scale: 0.98 }],
+    transform: [{ scale: 0.99 }],
+    shadowOpacity: 0.04,
   },
-  childCardHeader: {
+  childHeaderRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
+  childAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  childAvatarText: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: COLORS.primary,
+    fontFamily: "Inter_700Bold",
+  },
+  childInfo: {
+    flex: 1,
   },
   childName: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "700",
     color: COLORS.text,
     fontFamily: "Inter_700Bold",
   },
   childMeta: {
-    marginTop: 4,
+    marginTop: 2,
     fontSize: 13,
     color: COLORS.textSecondary,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "Inter_500Medium",
   },
   chevronContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#F1F5F9",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F8FAFC",
     alignItems: "center",
     justifyContent: "center",
   },
+  divider: {
+    height: 1,
+    backgroundColor: "#F1F5F9",
+    width: "100%",
+  },
   statsRow: {
     flexDirection: "row",
-    gap: 12,
+    alignItems: "center",
+    justifyContent: "space-around",
+    paddingVertical: 4,
   },
-  statCard: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: "#F8FAFC",
-    borderWidth: 1,
-    borderColor: COLORS.border,
+  statItem: {
+    alignItems: "center",
+    gap: 4,
+  },
+  verticalDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: "#E2E8F0",
   },
   statLabel: {
     fontSize: 11,
@@ -485,25 +523,36 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   statValue: {
-    marginTop: 4,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "700",
-    color: COLORS.primary,
+    color: COLORS.text,
     fontFamily: "Inter_700Bold",
   },
   tagRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
+    marginTop: 4,
   },
   tag: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
     backgroundColor: "#F1F5F9",
   },
   tagText: {
-    fontSize: 12,
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_600SemiBold",
+  },
+  moreTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 10,
+    backgroundColor: "#F8FAFC",
+  },
+  moreTagText: {
+    fontSize: 11,
     color: COLORS.textSecondary,
     fontFamily: "Inter_500Medium",
   },
