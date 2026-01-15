@@ -1,6 +1,11 @@
+import { useAuth } from "@/src/features/auth/hooks/use-auth";
+import {
+  loginSchema,
+  type LoginFormValues,
+} from "@/src/features/auth/validation/login-schema";
 import { Ionicons } from "@expo/vector-icons";
-import { Link, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { Link, Stack } from "expo-router";
+import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
   ActivityIndicator,
@@ -13,11 +18,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useAuth } from "@/src/features/auth/hooks/use-auth";
-import {
-  loginSchema,
-  type LoginFormValues,
-} from "@/src/features/auth/validation/login-schema";
 
 // Modern blue accent color palette
 const COLORS = {
@@ -34,8 +34,7 @@ const COLORS = {
 };
 
 export default function LoginScreen() {
-  const { signIn, signInWithGoogle, session, profile, isLoading } = useAuth();
-  const router = useRouter();
+  const { signIn, signInWithGoogle } = useAuth();
   const {
     control,
     handleSubmit,
@@ -53,19 +52,6 @@ export default function LoginScreen() {
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [isOAuthLoading, setIsOAuthLoading] = useState(false);
-
-  useEffect(() => {
-    if (isLoading || !session || !profile) {
-      return;
-    }
-    if (profile.role === "parent") {
-      router.replace("/(parent)/home");
-      return;
-    }
-    if (profile.role === "child") {
-      router.replace("/(child)/home");
-    }
-  }, [isLoading, profile, router, session]);
 
   const handleLogin = handleSubmit(async (values) => {
     clearErrors("root");
@@ -90,6 +76,9 @@ export default function LoginScreen() {
       style={styles.keyboardView}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
+      <Stack.Screen
+        options={{ gestureEnabled: false, headerBackButtonMenuEnabled: false }}
+      />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="always"

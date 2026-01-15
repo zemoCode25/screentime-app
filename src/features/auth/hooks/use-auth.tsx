@@ -117,6 +117,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const normalizedDisplayName = getDisplayName(nextSession.user);
     const normalizedEmail = getNormalizedEmail(nextSession.user);
 
+    const logChildMatch = (source: string) => {
+      console.warn("Auth sync: matched child", source);
+    };
+
     const claimChild = async () => {
       if (normalizedEmail) {
         const { data: claimedChild, error: claimError } = await supabase
@@ -124,28 +128,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .update({ child_user_id: nextSession.user.id })
           .is("child_user_id", null)
           .eq("child_email", normalizedEmail)
-          .select("id")
+          .select("id,child_user_id,child_email")
           .maybeSingle();
 
         if (claimError) {
           console.warn("Auth sync: failed to claim child.", claimError);
         }
         if (claimedChild) {
+          logChildMatch("claimed");
           return claimedChild;
         }
       }
 
       const { data: existingChild, error: existingError } = await supabase
         .from("children")
-        .select("id")
+        .select("id,child_user_id,child_email")
         .eq("child_user_id", nextSession.user.id)
         .maybeSingle();
 
       if (existingError) {
         console.warn("Auth sync: failed to load child link.", existingError);
       }
+      if (existingChild) {
+        logChildMatch("linked");
+        return existingChild;
+      }
 
-      return existingChild ?? null;
+      if (normalizedEmail) {
+        const { data: emailChild, error: emailError } = await supabase
+          .from("children")
+          .select("id,child_user_id,child_email")
+          .eq("child_email", normalizedEmail)
+          .maybeSingle();
+
+        if (emailError) {
+          console.warn("Auth sync: failed to match child email.", emailError);
+        }
+
+        if (emailChild) {
+          logChildMatch("email");
+        }
+        return emailChild ?? null;
+      }
+
+      return null;
     };
 
     const loadProfile = async () =>

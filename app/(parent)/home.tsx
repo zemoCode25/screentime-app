@@ -59,7 +59,7 @@ export default function ParentHomeScreen() {
               <Ionicons name="time" size={22} color={COLORS.primary} />
             </View>
             <View>
-              <Text style={styles.title}>Family Dashboard</Text>
+              <Text style={styles.title}>Parent Dashboard</Text>
             </View>
           </View>
 
