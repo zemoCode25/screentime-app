@@ -125,10 +125,15 @@ Verify
 - [ ] Newly added child appears immediately
 - [ ] Usage and limits render from DB
 
-## Phase 5: Child flows
+## Phase 5: Child Module Screens (Home + Analytics)
 
-- [ ] Child home with today's usage
-- [ ] Child analytics KPIs and charts
+- [ ] Child Home:
+  - [ ] list apps with usage today, limit, remaining time, progress bar
+- [ ] Child Analytics:
+  - [ ] KPIs: average trend, most used app, simple behavior label
+  - [ ] Pie chart: category distribution
+  - [ ] Bar chart: day/week/month totals
+- [ ] Ensure queries are RLS-safe (child sees only own records)
 
 Verify
 

@@ -1,6 +1,5 @@
 ﻿import { Ionicons } from "@expo/vector-icons";
 import { Link, useRouter } from "expo-router";
-import { useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -24,25 +23,24 @@ const COLORS = {
   text: "#0F172A",
   textSecondary: "#64748B",
   border: "#E2E8F0",
-  success: "#16A34A",
-  error: "#DC2626",
-  errorLight: "#FEF2F2",
+  success: "#10B981",
+  warning: "#F59E0B",
+  error: "#EF4444",
 };
 
 export default function ParentHomeScreen() {
   const router = useRouter();
   const { profile, signOut } = useAuth();
   const { data: children, isLoading, error } = useChildrenList();
-  const [showMenu, setShowMenu] = useState(false);
+
+  // Note: Simplified header interaction to match Child screen for consistency,
+  // but we can bring back the menu if needed. For now, direct sign out button is cleaner.
 
   const handleSignOut = () => {
     void signOut();
   };
 
   const childCount = children?.length ?? 0;
-  const initials = profile?.display_name
-    ? profile.display_name.substring(0, 2).toUpperCase()
-    : "P";
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -56,62 +54,44 @@ export default function ParentHomeScreen() {
         <View style={styles.header}>
           <View style={styles.brandRow}>
             <View style={styles.logoBadge}>
-              <Ionicons name="time" size={22} color={COLORS.primary} />
+              <Ionicons name="people" size={24} color={COLORS.primary} />
             </View>
             <View>
               <Text style={styles.title}>Parent Dashboard</Text>
+              <Text style={styles.subtitle}>
+                Welcome back, {profile?.display_name?.split(" ")[0] ?? "Parent"}
+              </Text>
             </View>
           </View>
-
-          {/* Profile Dropdown Trigger */}
-          <View style={styles.profileContainer}>
-            <Pressable
-              onPress={() => setShowMenu(!showMenu)}
-              style={styles.profileButton}
-            >
-              <Text style={styles.profileInitials}>{initials}</Text>
-            </Pressable>
-
-            {/* Dropdown Menu */}
-            {showMenu && (
-              <View style={styles.dropdownMenu}>
-                <Pressable
-                  onPress={handleSignOut}
-                  style={({ pressed }) => [
-                    styles.menuItem,
-                    pressed && styles.menuItemPressed,
-                  ]}
-                >
-                  <Ionicons
-                    name="log-out-outline"
-                    size={16}
-                    color={COLORS.error}
-                  />
-                  <Text style={styles.menuItemText}>Sign out</Text>
-                </Pressable>
-              </View>
-            )}
-          </View>
+          <Pressable
+            onPress={handleSignOut}
+            style={({ pressed }) => [
+              styles.signOutButton,
+              pressed && styles.signOutPressed,
+            ]}
+          >
+            <Ionicons name="log-out-outline" size={18} color={COLORS.text} />
+          </Pressable>
         </View>
 
-        <View style={styles.sectionHeader}>
-          <View style={styles.headerTitleRow}>
-            <Text style={styles.sectionTitle}>Children</Text>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{childCount}</Text>
+        <View style={styles.sectionHeaderLine}>
+          <View style={styles.sectionTitleRow}>
+            <Text style={styles.sectionTitle}>Your Children</Text>
+            <View style={styles.countBadge}>
+              <Text style={styles.countBadgeText}>{childCount}</Text>
             </View>
           </View>
           <Link href="/(parent)/child/register" asChild>
-            <Pressable style={styles.displayButton}>
+            <Pressable style={styles.addButton}>
               <Ionicons name="add" size={16} color={COLORS.surface} />
-              <Text style={styles.displayButtonText}>Add Child</Text>
+              <Text style={styles.addButtonText}>Add Child</Text>
             </Pressable>
           </Link>
         </View>
 
         {error ? (
-          <View style={styles.errorContainer}>
-            <Ionicons name="alert-circle" size={16} color={COLORS.error} />
+          <View style={styles.errorCard}>
+            <Ionicons name="alert-circle" size={20} color={COLORS.error} />
             <Text style={styles.errorText}>{error.message}</Text>
           </View>
         ) : null}
@@ -119,28 +99,26 @@ export default function ParentHomeScreen() {
         {isLoading ? (
           <View style={styles.loadingCard}>
             <ActivityIndicator color={COLORS.primary} />
-            <Text style={styles.loadingText}>Loading children...</Text>
+            <Text style={styles.loadingText}>Loading family data...</Text>
           </View>
         ) : null}
 
         {!isLoading && childCount === 0 ? (
           <View style={styles.emptyCard}>
-            <View style={styles.emptyIconContainer}>
-              <Ionicons
-                name="people-outline"
-                size={32}
-                color={COLORS.primary}
-              />
+            <View style={styles.emptyIcon}>
+              <Ionicons name="happy-outline" size={32} color={COLORS.primary} />
             </View>
             <Text style={styles.emptyTitle}>No children yet</Text>
             <Text style={styles.emptyText}>
-              Add your first child to start tracking usage insights.
+              Add a child profile to start monitoring their screen time and app
+              usage.
             </Text>
           </View>
         ) : null}
 
-        {!isLoading
-          ? children?.map((child) => (
+        <View style={styles.childrenList}>
+          {!isLoading &&
+            children?.map((child) => (
               <Pressable
                 key={child.id}
                 onPress={() =>
@@ -151,51 +129,62 @@ export default function ParentHomeScreen() {
                 }
                 style={({ pressed }) => [
                   styles.childCard,
-                  pressed && styles.childCardPressed,
+                  pressed && styles.cardPressed,
                 ]}
               >
-                <View style={styles.childHeaderRow}>
+                <View style={styles.cardHeader}>
                   <View style={styles.childAvatar}>
-                    <Text style={styles.childAvatarText}>
+                    <Text style={styles.childInitials}>
                       {child.name.substring(0, 1).toUpperCase()}
                     </Text>
                   </View>
                   <View style={styles.childInfo}>
                     <Text style={styles.childName}>{child.name}</Text>
                     <Text style={styles.childMeta}>
-                      {child.age} years old
-                      {child.grade_level ? ` • ${child.grade_level}` : ""}
+                      {child.age} years • {child.grade_level ?? "N/A"}
                     </Text>
                   </View>
-                  <View style={styles.chevronContainer}>
-                    <Ionicons
-                      name="chevron-forward"
-                      size={16}
-                      color={COLORS.textSecondary}
-                    />
-                  </View>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={20}
+                    color={COLORS.textSecondary}
+                  />
                 </View>
 
-                <View style={styles.divider} />
+                <View style={styles.cardDivider} />
 
                 <View style={styles.statsRow}>
                   <View style={styles.statItem}>
                     <Text style={styles.statLabel}>Avg Screen Time</Text>
-                    <Text style={styles.statValue}>
-                      {formatDuration(child.avgDailySeconds)}
-                    </Text>
+                    <View style={styles.statValueRow}>
+                      <Ionicons
+                        name="time-outline"
+                        size={14}
+                        color={COLORS.primary}
+                      />
+                      <Text style={styles.statValue}>
+                        {formatDuration(child.avgDailySeconds)}
+                      </Text>
+                    </View>
                   </View>
                   <View style={styles.verticalDivider} />
                   <View style={styles.statItem}>
                     <Text style={styles.statLabel}>Active Days</Text>
-                    <Text style={styles.statValue}>
-                      {child.activeDays} days
-                    </Text>
+                    <View style={styles.statValueRow}>
+                      <Ionicons
+                        name="calendar-outline"
+                        size={14}
+                        color={COLORS.success}
+                      />
+                      <Text style={styles.statValue}>
+                        {child.activeDays} days
+                      </Text>
+                    </View>
                   </View>
                 </View>
 
-                {child.interests.length > 0 && (
-                  <View style={styles.tagRow}>
+                {child.interests && child.interests.length > 0 && (
+                  <View style={styles.tagsRow}>
                     {child.interests.slice(0, 3).map((interest) => (
                       <View key={interest} style={styles.tag}>
                         <Text style={styles.tagText}>{interest}</Text>
@@ -211,8 +200,8 @@ export default function ParentHomeScreen() {
                   </View>
                 )}
               </Pressable>
-            ))
-          : null}
+            ))}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -225,33 +214,33 @@ const styles = StyleSheet.create({
   },
   backgroundGlowTop: {
     position: "absolute",
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: "#E0F2FE",
-    top: -120,
-    right: -80,
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    backgroundColor: "#E0F2FE", // Blue-100
+    top: -100,
+    right: -100,
+    opacity: 0.6,
   },
   backgroundGlowBottom: {
     position: "absolute",
-    width: 320,
-    height: 320,
-    borderRadius: 160,
-    backgroundColor: "#EFF6FF",
-    bottom: -140,
-    left: -120,
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    backgroundColor: "#F0F9FF", // Sky-50
+    bottom: -50,
+    left: -100,
+    opacity: 0.6,
   },
   content: {
     padding: 24,
-    paddingBottom: 100,
-    gap: 20,
+    paddingBottom: 40,
+    gap: 24,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 10,
-    zIndex: 10,
   },
   brandRow: {
     flexDirection: "row",
@@ -259,81 +248,48 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   logoBadge: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: COLORS.primaryLight,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: COLORS.text,
-    fontFamily: "Inter_700Bold",
-  },
-  profileContainer: {
-    position: "relative",
-  },
-  profileButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.primary,
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: COLORS.surface,
     alignItems: "center",
     justifyContent: "center",
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
     elevation: 4,
   },
-  profileInitials: {
-    color: "#FFF",
-    fontSize: 14,
+  title: {
+    fontSize: 22,
     fontWeight: "700",
+    color: COLORS.text,
     fontFamily: "Inter_700Bold",
   },
-  dropdownMenu: {
-    position: "absolute",
-    top: 50,
-    right: 0,
-    width: 140,
+  subtitle: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_400Regular",
+  },
+  signOutButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: 6,
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
     borderColor: COLORS.border,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
-    zIndex: 100,
   },
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    padding: 10,
-    borderRadius: 8,
+  signOutPressed: {
+    backgroundColor: COLORS.primaryLight,
   },
-  menuItemPressed: {
-    backgroundColor: COLORS.errorLight,
-  },
-  menuItemText: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: COLORS.error,
-    fontFamily: "Inter_500Medium",
-  },
-  sectionHeader: {
+  sectionHeaderLine: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 8,
   },
-  headerTitleRow: {
+  sectionTitleRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -344,73 +300,81 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontFamily: "Inter_700Bold",
   },
-  badge: {
+  countBadge: {
     backgroundColor: COLORS.primaryLight,
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 20,
+    borderRadius: 12,
   },
-  badgeText: {
+  countBadgeText: {
     fontSize: 12,
     fontWeight: "600",
     color: COLORS.primary,
     fontFamily: "Inter_600SemiBold",
   },
-  displayButton: {
-    backgroundColor: COLORS.primary,
+  addButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    backgroundColor: COLORS.primary,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  displayButtonText: {
+  addButtonText: {
     fontSize: 13,
     fontWeight: "600",
     color: COLORS.surface,
     fontFamily: "Inter_600SemiBold",
   },
-  errorContainer: {
+  errorCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    padding: 12,
-    borderRadius: 10,
-    backgroundColor: COLORS.errorLight,
+    gap: 12,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
   },
   errorText: {
-    flex: 1,
-    fontSize: 13,
     color: COLORS.error,
+    fontSize: 14,
     fontFamily: "Inter_500Medium",
+    flex: 1,
   },
   loadingCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    padding: 16,
-    borderRadius: 12,
+    justifyContent: "center",
+    gap: 12,
+    padding: 24,
     backgroundColor: COLORS.surface,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   loadingText: {
-    fontSize: 13,
     color: COLORS.textSecondary,
-    fontFamily: "Inter_400Regular",
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
   },
   emptyCard: {
     alignItems: "center",
     justifyContent: "center",
     padding: 32,
-    borderRadius: 20,
     backgroundColor: COLORS.surface,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderStyle: "dashed",
   },
-  emptyIconContainer: {
+  emptyIcon: {
     width: 64,
     height: 64,
     borderRadius: 32,
@@ -420,40 +384,40 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   emptyTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "700",
     color: COLORS.text,
     fontFamily: "Inter_700Bold",
+    marginBottom: 8,
   },
   emptyText: {
-    marginTop: 6,
     textAlign: "center",
     color: COLORS.textSecondary,
     fontSize: 14,
-    maxWidth: 240,
+    lineHeight: 20,
     fontFamily: "Inter_400Regular",
+    maxWidth: 240,
   },
-
-  // Refined Child Card Styles
-  childCard: {
-    padding: 20,
-    borderRadius: 16,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
+  childrenList: {
     gap: 16,
-    shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 2 },
+  },
+  childCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    marginBottom: 4,
+    shadowRadius: 12,
+    elevation: 3,
+    gap: 16,
   },
-  childCardPressed: {
+  cardPressed: {
     transform: [{ scale: 0.99 }],
-    shadowOpacity: 0.04,
   },
-  childHeaderRow: {
+  cardHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -461,12 +425,12 @@ const styles = StyleSheet.create({
   childAvatar: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: 16,
     backgroundColor: "#F1F5F9",
     alignItems: "center",
     justifyContent: "center",
   },
-  childAvatarText: {
+  childInitials: {
     fontSize: 20,
     fontWeight: "700",
     color: COLORS.primary,
@@ -482,74 +446,71 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
   },
   childMeta: {
-    marginTop: 2,
     fontSize: 13,
     color: COLORS.textSecondary,
     fontFamily: "Inter_500Medium",
+    marginTop: 2,
   },
-  chevronContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#F8FAFC",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  divider: {
+  cardDivider: {
     height: 1,
-    backgroundColor: "#F1F5F9",
-    width: "100%",
+    backgroundColor: COLORS.border,
   },
   statsRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-around",
-    paddingVertical: 4,
   },
   statItem: {
-    alignItems: "center",
+    flex: 1,
     gap: 4,
   },
   verticalDivider: {
     width: 1,
-    height: 24,
-    backgroundColor: "#E2E8F0",
+    height: 32,
+    backgroundColor: COLORS.border,
+    marginHorizontal: 16,
   },
   statLabel: {
     fontSize: 11,
-    textTransform: "uppercase",
     color: COLORS.textSecondary,
     fontFamily: "Inter_600SemiBold",
-    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  statValueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 2,
   },
   statValue: {
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 15,
+    fontWeight: "600",
     color: COLORS.text,
-    fontFamily: "Inter_700Bold",
+    fontFamily: "Inter_600SemiBold",
   },
-  tagRow: {
+  tagsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
     marginTop: 4,
   },
   tag: {
+    paddingVertical: 4,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
     backgroundColor: "#F1F5F9",
+    borderRadius: 8,
   },
   tagText: {
-    fontSize: 11,
+    fontSize: 12,
     color: COLORS.textSecondary,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "Inter_500Medium",
   },
   moreTag: {
+    paddingVertical: 4,
     paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 10,
     backgroundColor: "#F8FAFC",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   moreTagText: {
     fontSize: 11,
