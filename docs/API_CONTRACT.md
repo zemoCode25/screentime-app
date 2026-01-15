@@ -7,12 +7,14 @@ This document defines request and response shapes for Supabase usage. It is the 
 - Timestamps: ISO 8601 UTC (timestamptz)
 - Dates: YYYY-MM-DD (date)
 - Durations: seconds
+- Emails: lowercase strings
 - RLS: parent and child access is enforced in the database
 
 ## Enums
 - user_role: parent | child
 - device_platform: android | ios | web | unknown
 - app_category: social | games | education | productivity | entertainment | communication | utilities | other
+- motivation_type: entertainment_videos | gaming | learning_education | social_communication | creativity | habit_boredom | relaxation_stress_relief | rewards_achievements | other
 
 ## Table models (row shapes)
 
@@ -31,6 +33,7 @@ This document defines request and response shapes for Supabase usage. It is the 
 {
   "id": "uuid",
   "parent_user_id": "uuid",
+  "child_email": "string",
   "child_user_id": "uuid | null",
   "name": "string",
   "age": "number | null",
@@ -122,14 +125,15 @@ This document defines request and response shapes for Supabase usage. It is the 
 ### Parent: list children
 Query: `children` by parent_user_id (RLS enforces)
 
-Response: array of children rows
+Response: array of children rows (includes `child_email`, `child_user_id`)
 
 ### Parent: create child
-Insert into `children`
+Insert into `children` (creates a pending child account)
 
 Request
 ```json
 {
+  "child_email": "kid@example.com",
   "name": "string",
   "age": 10,
   "grade_level": "4",
@@ -139,6 +143,19 @@ Request
 ```
 
 Response: created child row
+
+### Child: claim pending child
+Update `children` by email when the child signs in with Google
+
+Request
+```json
+{
+  "child_user_id": "auth.uid()",
+  "child_email": "kid@example.com"
+}
+```
+
+Response: updated child row
 
 ### Child: upsert device
 Upsert `child_devices` on (child_id, device_id)

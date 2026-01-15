@@ -6,10 +6,11 @@
   useFonts,
 } from "@expo-google-fonts/inter";
 import { DefaultTheme, ThemeProvider } from "@react-navigation/native";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import "react-native-reanimated";
 
 import { AuthGate } from "@/src/features/auth/components/auth-gate";
@@ -29,6 +30,7 @@ export default function RootLayout() {
     Inter_600SemiBold,
     Inter_700Bold,
   });
+  const [queryClient] = useState(() => new QueryClient());
 
   useEffect(() => {
     if (error) throw error;
@@ -55,16 +57,18 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={lightTheme}>
-      <AuthProvider>
-        <AuthGate>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: "#FFFFFF" },
-            }}
-          />
-        </AuthGate>
-      </AuthProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <AuthGate>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: "#FFFFFF" },
+              }}
+            />
+          </AuthGate>
+        </AuthProvider>
+      </QueryClientProvider>
       <StatusBar style="dark" backgroundColor="#FFFFFF" />
     </ThemeProvider>
   );

@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Link } from "expo-router";
-import { useState } from "react";
+import { Link, useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
   ActivityIndicator,
@@ -34,7 +34,8 @@ const COLORS = {
 };
 
 export default function LoginScreen() {
-  const { signIn, signInWithGoogle } = useAuth();
+  const { signIn, signInWithGoogle, session, profile, isLoading } = useAuth();
+  const router = useRouter();
   const {
     control,
     handleSubmit,
@@ -52,6 +53,19 @@ export default function LoginScreen() {
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [isOAuthLoading, setIsOAuthLoading] = useState(false);
+
+  useEffect(() => {
+    if (isLoading || !session || !profile) {
+      return;
+    }
+    if (profile.role === "parent") {
+      router.replace("/(parent)/home");
+      return;
+    }
+    if (profile.role === "child") {
+      router.replace("/(child)/home");
+    }
+  }, [isLoading, profile, router, session]);
 
   const handleLogin = handleSubmit(async (values) => {
     clearErrors("root");

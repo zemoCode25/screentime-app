@@ -17,12 +17,10 @@ export function AuthGate({ children }: { children: ReactNode }) {
     }
 
     const group = segments[0];
-    if (!group) {
-      return;
-    }
     const isAuthGroup = group === "(auth)";
     const isParentGroup = group === "(parent)";
     const isChildGroup = group === "(child)";
+    const isRoot = !group;
 
     if (!session) {
       if (!isAuthGroup) {
@@ -38,12 +36,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (profile.role === "parent" && !isParentGroup) {
+    if (profile.role === "parent" && (isRoot || !isParentGroup)) {
       router.replace("/(parent)/home");
       return;
     }
 
-    if (profile.role === "child" && !isChildGroup) {
+    if (profile.role === "child" && (isRoot || !isChildGroup)) {
       router.replace("/(child)/home");
     }
   }, [isLoading, profile, router, segments, session]);
