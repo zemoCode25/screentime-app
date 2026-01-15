@@ -1,4 +1,4 @@
-import {
+﻿import {
   Inter_400Regular,
   Inter_500Medium,
   Inter_600SemiBold,
@@ -16,7 +16,7 @@ import { AuthGate } from "@/src/features/auth/components/auth-gate";
 import { AuthProvider } from "@/src/features/auth/hooks/use-auth";
 
 export const unstable_settings = {
-  anchor: "(parent)",
+  anchor: "(auth)/login",
 };
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -62,11 +62,7 @@ export default function RootLayout() {
               headerShown: false,
               contentStyle: { backgroundColor: "#FFFFFF" },
             }}
-          >
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="(parent)" />
-            <Stack.Screen name="(child)" />
-          </Stack>
+          />
         </AuthGate>
       </AuthProvider>
       <StatusBar style="dark" backgroundColor="#FFFFFF" />

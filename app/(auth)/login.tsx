@@ -13,9 +13,11 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { z } from "zod";
-
 import { useAuth } from "@/src/features/auth/hooks/use-auth";
+import {
+  loginSchema,
+  type LoginFormValues,
+} from "@/src/features/auth/validation/login-schema";
 
 // Modern blue accent color palette
 const COLORS = {
@@ -31,19 +33,8 @@ const COLORS = {
   errorLight: "#FEF2F2",
 };
 
-const loginSchema = z.object({
-  email: z
-    .string()
-    .trim()
-    .min(1, "Email is required.")
-    .email("Enter a valid email."),
-  password: z.string().min(1, "Password is required."),
-});
-
-type LoginFormValues = z.infer<typeof loginSchema>;
-
 export default function LoginScreen() {
-  const { signIn } = useAuth();
+  const { signIn, signInWithGoogle } = useAuth();
   const {
     control,
     handleSubmit,
@@ -60,6 +51,7 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
+  const [isOAuthLoading, setIsOAuthLoading] = useState(false);
 
   const handleLogin = handleSubmit(async (values) => {
     clearErrors("root");
@@ -68,6 +60,16 @@ export default function LoginScreen() {
       setError("root", { message: error });
     }
   });
+
+  const handleGoogleLogin = async () => {
+    clearErrors("root");
+    setIsOAuthLoading(true);
+    const { error } = await signInWithGoogle();
+    if (error) {
+      setError("root", { message: error });
+    }
+    setIsOAuthLoading(false);
+  };
 
   return (
     <KeyboardAvoidingView
@@ -231,11 +233,11 @@ export default function LoginScreen() {
               {/* Sign In Button */}
               <Pressable
                 onPress={handleLogin}
-                disabled={isSubmitting}
+                disabled={isSubmitting || isOAuthLoading}
                 style={({ pressed }) => [
                   styles.button,
                   pressed && styles.buttonPressed,
-                  isSubmitting && styles.buttonDisabled,
+                  (isSubmitting || isOAuthLoading) && styles.buttonDisabled,
                 ]}
               >
                 {isSubmitting ? (
@@ -255,13 +257,22 @@ export default function LoginScreen() {
 
             {/* Google Sign In */}
             <Pressable
+              onPress={handleGoogleLogin}
+              disabled={isOAuthLoading || isSubmitting}
               style={({ pressed }) => [
                 styles.googleButton,
                 pressed && styles.googleButtonPressed,
+                (isOAuthLoading || isSubmitting) && styles.googleButtonDisabled,
               ]}
             >
-              <Ionicons name="logo-google" size={20} color={COLORS.text} />
-              <Text style={styles.googleButtonText}>Continue with Google</Text>
+              {isOAuthLoading ? (
+                <ActivityIndicator color={COLORS.text} size="small" />
+              ) : (
+                <Ionicons name="logo-google" size={20} color={COLORS.text} />
+              )}
+              <Text style={styles.googleButtonText}>
+                {isOAuthLoading ? "Connecting..." : "Continue with Google"}
+              </Text>
             </Pressable>
 
             {/* Footer */}
@@ -354,6 +365,9 @@ const styles = StyleSheet.create({
   },
   googleButtonPressed: {
     backgroundColor: COLORS.surface,
+  },
+  googleButtonDisabled: {
+    opacity: 0.6,
   },
   googleButtonText: {
     fontSize: 14,
