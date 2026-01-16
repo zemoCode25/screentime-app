@@ -206,6 +206,7 @@ export default function ChildHomeScreen() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [visibleAppCount, setVisibleAppCount] = useState(15);
   const { data: child, isLoading: childLoading, error: childError } =
     useChildProfile();
   const childId = child?.id;
@@ -220,28 +221,6 @@ export default function ChildHomeScreen() {
   const { data: usageRows, isLoading: usageLoading, error: usageError } =
     useChildUsageDaily(childId, startDate);
 
-  // Debug logging
-  useEffect(() => {
-    console.log('[DEBUG] Apps count:', apps?.length ?? 0);
-    console.log('[DEBUG] Usage rows count:', usageRows?.length ?? 0);
-    console.log('[DEBUG] Time range:', timeRange, 'Days:', rangeDays, 'Start date:', startDate);
-
-    if (usageRows && usageRows.length > 0) {
-      console.log('[DEBUG] Sample usage rows:');
-      usageRows.slice(0, 3).forEach((row, i) => {
-        console.log(`  [${i}] ${row.package_name}: ${row.total_seconds}s on ${row.usage_date}`);
-      });
-    } else {
-      console.log('[DEBUG] No usage rows fetched. childId:', childId);
-    }
-
-    if (apps && apps.length > 0) {
-      console.log('[DEBUG] Sample apps:');
-      apps.slice(0, 3).forEach((app, i) => {
-        console.log(`  [${i}] ${app.app_name} (${app.package_name})`);
-      });
-    }
-  }, [apps, usageRows, childId, startDate, timeRange, rangeDays]);
   const {
     data: usageHourlyRows,
     isLoading: usageHourlyLoading,
@@ -416,10 +395,16 @@ export default function ChildHomeScreen() {
     [appCards, selectedCategory]
   );
 
+  const visibleAppCards = useMemo(
+    () => filteredAppCards.slice(0, visibleAppCount),
+    [filteredAppCards, visibleAppCount]
+  );
+
+  const hasMoreApps = filteredAppCards.length > visibleAppCount;
+
   const greetingName = child?.name ?? profile?.display_name ?? "there";
 
-  const selectableApps =
-    selectedCategory === "all" ? appCards : filteredAppCards;
+  const selectableApps = filteredAppCards;
 
   useEffect(() => {
     if (selectableApps.length === 0) {
@@ -436,6 +421,11 @@ export default function ChildHomeScreen() {
       setSelectedAppId(selectableApps[0].id);
     }
   }, [selectableApps, selectedAppId]);
+
+  // Reset visible count when category changes
+  useEffect(() => {
+    setVisibleAppCount(15);
+  }, [selectedCategory]);
 
   const selectedApp = useMemo(() => {
     if (selectableApps.length === 0) {
@@ -622,6 +612,10 @@ export default function ChildHomeScreen() {
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  const handleLoadMore = () => {
+    setVisibleAppCount((prev) => prev + 15);
   };
 
   const secondaryValue = isTodayRange
@@ -1040,7 +1034,7 @@ export default function ChildHomeScreen() {
           ) : null}
 
           <View style={styles.appList}>
-            {filteredAppCards.map((app, index) => {
+            {visibleAppCards.map((app, index) => {
               const rawPercent = Math.min(
                 Math.round(app.progress * 100),
                 100
@@ -1133,6 +1127,28 @@ export default function ChildHomeScreen() {
               );
             })}
           </View>
+
+          {hasMoreApps ? (
+            <Pressable
+              onPress={handleLoadMore}
+              style={({ pressed }) => [
+                styles.loadMoreButton,
+                pressed && styles.loadMoreButtonPressed,
+              ]}
+            >
+              <Ionicons name="chevron-down" size={20} color={COLORS.primary} />
+              <Text style={styles.loadMoreText}>
+                Load more ({filteredAppCards.length - visibleAppCount} remaining)
+              </Text>
+            </Pressable>
+          ) : filteredAppCards.length > 15 ? (
+            <View style={styles.allLoadedCard}>
+              <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
+              <Text style={styles.allLoadedText}>
+                All {filteredAppCards.length} apps loaded
+              </Text>
+            </View>
+          ) : null}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -1772,5 +1788,39 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontFamily: "Inter_400Regular",
     maxWidth: 240,
+  },
+  loadMoreButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    backgroundColor: COLORS.primaryLight,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    marginTop: 4,
+  },
+  loadMoreButtonPressed: {
+    opacity: 0.7,
+  },
+  loadMoreText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontFamily: "Inter_600SemiBold",
+  },
+  allLoadedCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    marginTop: 4,
+  },
+  allLoadedText: {
+    fontSize: 13,
+    color: COLORS.success,
+    fontFamily: "Inter_500Medium",
   },
 });
