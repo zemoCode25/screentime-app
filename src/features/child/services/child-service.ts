@@ -8,6 +8,62 @@ type AppUsageHourlyRow =
   Database["public"]["Tables"]["app_usage_hourly"]["Row"];
 type AppLimitRow = Database["public"]["Tables"]["app_limits"]["Row"];
 
+type MockAppSeed = {
+  appName: string;
+  packageName: string;
+  category: Database["public"]["Enums"]["app_category"];
+  baseSeconds: number;
+  baseOpens: number;
+};
+
+const MOCK_DEVICE_ID = "mock-device";
+const MOCK_APPS: MockAppSeed[] = [
+  {
+    appName: "YouTube",
+    packageName: "com.google.android.youtube",
+    category: "video",
+    baseSeconds: 5400,
+    baseOpens: 18,
+  },
+  {
+    appName: "Roblox",
+    packageName: "com.roblox.client",
+    category: "games",
+    baseSeconds: 4200,
+    baseOpens: 12,
+  },
+  {
+    appName: "Chrome",
+    packageName: "com.android.chrome",
+    category: "productivity",
+    baseSeconds: 1800,
+    baseOpens: 22,
+  },
+  {
+    appName: "WhatsApp",
+    packageName: "com.whatsapp",
+    category: "communication",
+    baseSeconds: 900,
+    baseOpens: 35,
+  },
+  {
+    appName: "Khan Academy",
+    packageName: "org.khanacademy.android",
+    category: "education",
+    baseSeconds: 1500,
+    baseOpens: 8,
+  },
+  {
+    appName: "Calculator",
+    packageName: "com.android.calculator2",
+    category: "utilities",
+    baseSeconds: 0,
+    baseOpens: 0,
+  },
+];
+
+const getIsoDate = (date: Date) => date.toISOString().slice(0, 10);
+
 const CHILD_SELECT_FIELDS =
   "id,name,age,grade_level,interests,motivations,child_user_id,child_email,parent_user_id";
 
@@ -119,4 +175,69 @@ export async function fetchChildLimits(childId: string): Promise<AppLimitRow[]> 
   }
 
   return data ?? [];
+}
+
+export async function seedChildMockUsage(childId: string) {
+  const now = new Date();
+  const appsPayload = MOCK_APPS.map((app) => ({
+    child_id: childId,
+    app_name: app.appName,
+    package_name: app.packageName,
+    category: app.category,
+    icon_path: null,
+  }));
+
+  const { error: appsError } = await supabase
+    .from("child_apps")
+    .upsert(appsPayload, { onConflict: "child_id,package_name" });
+
+  if (appsError) {
+    throw new Error(appsError.message);
+  }
+
+  const usagePayload: Database["public"]["Tables"]["app_usage_daily"]["Insert"][] =
+    [];
+
+  for (let dayOffset = 0; dayOffset < 7; dayOffset += 1) {
+    const usageDate = new Date(now);
+    usageDate.setDate(now.getDate() - dayOffset);
+    const usageDateString = getIsoDate(usageDate);
+    const dayFactor = 1 - dayOffset * 0.08;
+
+    for (const app of MOCK_APPS) {
+      const totalSeconds = Math.max(
+        Math.round(app.baseSeconds * dayFactor),
+        0
+      );
+      const openCount = Math.max(Math.round(app.baseOpens * dayFactor), 0);
+
+      if (totalSeconds === 0 && openCount === 0) {
+        continue;
+      }
+
+      usagePayload.push({
+        child_id: childId,
+        package_name: app.packageName,
+        total_seconds: totalSeconds,
+        open_count: openCount,
+        usage_date: usageDateString,
+        device_id: MOCK_DEVICE_ID,
+        last_synced_at: now.toISOString(),
+      });
+    }
+  }
+
+  if (usagePayload.length === 0) {
+    return;
+  }
+
+  const { error: usageError } = await supabase
+    .from("app_usage_daily")
+    .upsert(usagePayload, {
+      onConflict: "child_id,package_name,usage_date,device_id",
+    });
+
+  if (usageError) {
+    throw new Error(usageError.message);
+  }
 }

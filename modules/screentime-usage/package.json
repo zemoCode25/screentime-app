@@ -1,0 +1,7 @@
+{
+  "name": "screentime-usage",
+  "version": "0.0.1",
+  "main": "src/index.ts",
+  "description": "Local Expo module for Android UsageStats access.",
+  "license": "MIT"
+}

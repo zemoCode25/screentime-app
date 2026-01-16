@@ -15,6 +15,11 @@ import {
   useChildUsageDaily,
   useChildUsageHourly,
 } from "@/src/features/child/hooks/use-child-data";
+import {
+  getAppCategoryLabel,
+  resolveAppCategory,
+  type AppCategory,
+} from "@/src/utils/app-category";
 import { formatDuration } from "@/src/utils/time";
 import type { Database } from "@/types/database-types";
 
@@ -31,7 +36,6 @@ const COLORS = {
   error: "#EF4444",
 };
 
-type AppCategory = Database["public"]["Enums"]["app_category"];
 type ChildAppRow = Database["public"]["Tables"]["child_apps"]["Row"];
 
 type CategorySlice = {
@@ -53,19 +57,16 @@ type DayBar = {
   value: number;
 };
 
-const CATEGORY_DETAILS: Record<
-  AppCategory,
-  { label: string; color: string }
-> = {
-  education: { label: "Education", color: "#22C55E" },
-  games: { label: "Games", color: "#F59E0B" },
-  video: { label: "Video", color: "#F97316" },
-  social: { label: "Social", color: "#38BDF8" },
-  creativity: { label: "Creativity", color: "#F472B6" },
-  productivity: { label: "Productivity", color: "#14B8A6" },
-  communication: { label: "Chat", color: "#6366F1" },
-  utilities: { label: "Utilities", color: "#94A3B8" },
-  other: { label: "Other", color: "#CBD5E1" },
+const CATEGORY_COLORS: Record<AppCategory, string> = {
+  education: "#22C55E",
+  games: "#F59E0B",
+  video: "#F97316",
+  social: "#38BDF8",
+  creativity: "#F472B6",
+  productivity: "#14B8A6",
+  communication: "#6366F1",
+  utilities: "#94A3B8",
+  other: "#CBD5E1",
 };
 
 const HOUR_STARTS = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22];
@@ -187,9 +188,12 @@ export default function ChildAnalyticsScreen() {
       const existingPackageTotal = packageTotals.get(row.package_name) ?? 0;
       packageTotals.set(row.package_name, existingPackageTotal + seconds);
 
-      const category = appMap.get(row.package_name)?.category ?? "other";
-      const existingCategoryTotal = categoryTotals.get(category) ?? 0;
-      categoryTotals.set(category, existingCategoryTotal + seconds);
+      const resolvedCategory = resolveAppCategory(
+        appMap.get(row.package_name)?.category ?? "other",
+        row.package_name
+      );
+      const existingCategoryTotal = categoryTotals.get(resolvedCategory) ?? 0;
+      categoryTotals.set(resolvedCategory, existingCategoryTotal + seconds);
     }
 
     const hourBuckets = Array.from({ length: 12 }, () => 0);
@@ -261,7 +265,7 @@ export default function ChildAnalyticsScreen() {
       const avgHours = avgSeconds / 3600;
 
       if (topCategory && topShare >= 0.45) {
-        const label = CATEGORY_DETAILS[topCategory[0]].label;
+        const label = getAppCategoryLabel(topCategory[0]);
         behavior = `${label} focused`;
         behaviorDetail = `Most of your time is in ${label.toLowerCase()} apps.`;
       } else if (avgHours >= 4) {
@@ -294,8 +298,8 @@ export default function ChildAnalyticsScreen() {
 
     const slices: CategorySlice[] = topCategories.map(([key, value]) => ({
       key,
-      label: CATEGORY_DETAILS[key].label,
-      color: CATEGORY_DETAILS[key].color,
+      label: getAppCategoryLabel(key),
+      color: CATEGORY_COLORS[key],
       value,
       percent: total > 0 ? Math.round((value / total) * 100) : 0,
     }));
@@ -303,8 +307,8 @@ export default function ChildAnalyticsScreen() {
     if (otherTotal > 0) {
       slices.push({
         key: "other",
-        label: "Other",
-        color: CATEGORY_DETAILS.other.color,
+        label: getAppCategoryLabel("other"),
+        color: CATEGORY_COLORS.other,
         value: otherTotal,
         percent: total > 0 ? Math.round((otherTotal / total) * 100) : 0,
       });
