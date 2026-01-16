@@ -1,5 +1,6 @@
 package com.screentime.usage
 
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.AppOpsManager
 import android.app.usage.UsageStatsManager
 import android.content.Context
@@ -8,6 +9,7 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
+import android.view.accessibility.AccessibilityManager
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
@@ -66,6 +68,34 @@ class UsageStatsModule : Module() {
           "lastTimeUsed" to stat.lastTimeUsed
         )
       }
+    }
+
+    Function("isAccessibilityEnabled") {
+      val context = appContext.reactContext ?: return@Function false
+      val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
+      val enabledServices = am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+      val packageName = context.packageName
+
+      enabledServices.any { service ->
+        service.id.contains(packageName)
+      }
+    }
+
+    Function("requestAccessibilityPermission") {
+      val context = appContext.reactContext ?: return@Function null
+      val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+      intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      context.startActivity(intent)
+    }
+
+    AsyncFunction("updateBlockedPackages") { packages: List<String> ->
+      val context = appContext.reactContext ?: return@AsyncFunction null
+      AppBlockingService.updateBlockedPackages(context, packages.toSet())
+    }
+
+    AsyncFunction("getBlockedPackages") {
+      val context = appContext.reactContext ?: return@AsyncFunction emptyList<String>()
+      AppBlockingService.getBlockedPackages(context).toList()
     }
   }
 

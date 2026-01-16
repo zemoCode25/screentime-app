@@ -21,6 +21,10 @@ type UsageStatsModuleType = {
       lastTimeUsed: number;
     }[]
   >;
+  isAccessibilityEnabled: () => boolean;
+  requestAccessibilityPermission: () => void;
+  updateBlockedPackages: (packages: string[]) => Promise<void>;
+  getBlockedPackages: () => Promise<string[]>;
 };
 
 const UsageStatsModule =
@@ -47,4 +51,20 @@ export function getUsageStats(startTimeMs: number, endTimeMs: number) {
     UsageStatsModule?.getUsageStats?.(startTimeMs, endTimeMs) ??
     Promise.resolve([])
   );
+}
+
+export function isAccessibilityEnabled() {
+  return UsageStatsModule?.isAccessibilityEnabled?.() ?? false;
+}
+
+export function requestAccessibilityPermission() {
+  UsageStatsModule?.requestAccessibilityPermission?.();
+}
+
+export function updateBlockedPackages(packages: string[]) {
+  return UsageStatsModule?.updateBlockedPackages?.(packages) ?? Promise.resolve();
+}
+
+export function getBlockedPackages() {
+  return UsageStatsModule?.getBlockedPackages?.() ?? Promise.resolve([]);
 }

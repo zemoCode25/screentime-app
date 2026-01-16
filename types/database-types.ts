@@ -145,6 +145,120 @@ export type Database = {
           }
         ];
       };
+      app_access_overrides: {
+        Row: {
+          id: string;
+          child_id: string;
+          package_name: string;
+          granted_by_parent_id: string;
+          granted_at: string;
+          expires_at: string;
+          duration_minutes: number;
+          reason: string | null;
+          status: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          child_id: string;
+          package_name: string;
+          granted_by_parent_id: string;
+          granted_at?: string;
+          expires_at: string;
+          duration_minutes: number;
+          reason?: string | null;
+          status: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          child_id?: string;
+          package_name?: string;
+          granted_by_parent_id?: string;
+          granted_at?: string;
+          expires_at?: string;
+          duration_minutes?: number;
+          reason?: string | null;
+          status?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "app_access_overrides_child_id_fkey";
+            columns: ["child_id"];
+            isOneToOne: false;
+            referencedRelation: "children";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "app_access_overrides_granted_by_parent_id_fkey";
+            columns: ["granted_by_parent_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      override_requests: {
+        Row: {
+          id: string;
+          child_id: string;
+          package_name: string;
+          app_name: string;
+          requested_at: string;
+          status: string;
+          granted_by_parent_id: string | null;
+          responded_at: string | null;
+          response_note: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          child_id: string;
+          package_name: string;
+          app_name: string;
+          requested_at?: string;
+          status: string;
+          granted_by_parent_id?: string | null;
+          responded_at?: string | null;
+          response_note?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          child_id?: string;
+          package_name?: string;
+          app_name?: string;
+          requested_at?: string;
+          status?: string;
+          granted_by_parent_id?: string | null;
+          responded_at?: string | null;
+          response_note?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "override_requests_child_id_fkey";
+            columns: ["child_id"];
+            isOneToOne: false;
+            referencedRelation: "children";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "override_requests_granted_by_parent_id_fkey";
+            columns: ["granted_by_parent_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
       app_usage_daily: {
         Row: {
           child_id: string;

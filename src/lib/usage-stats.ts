@@ -5,6 +5,10 @@ import {
   isUsageAccessGranted,
   isUsageModuleAvailable,
   openUsageAccessSettings,
+  isAccessibilityEnabled,
+  requestAccessibilityPermission,
+  updateBlockedPackages,
+  getBlockedPackages,
 } from "screentime-usage";
 
 export type InstalledApp = {
@@ -56,4 +60,46 @@ export async function fetchUsageStats(
     return [];
   }
   return getUsageStats(startTimeMs, endTimeMs);
+}
+
+export type AccessibilityStatus =
+  | "granted"
+  | "needs-permission"
+  | "unavailable";
+
+export function canUseAccessibility() {
+  return Platform.OS === "android" && isUsageModuleAvailable();
+}
+
+export function checkAccessibilityEnabled(): boolean {
+  if (!canUseAccessibility()) {
+    return false;
+  }
+  return isAccessibilityEnabled();
+}
+
+export async function ensureAccessibilityAccess(): Promise<AccessibilityStatus> {
+  if (!canUseAccessibility()) {
+    return "unavailable";
+  }
+  const enabled = isAccessibilityEnabled();
+  if (enabled) {
+    return "granted";
+  }
+  requestAccessibilityPermission();
+  return "needs-permission";
+}
+
+export async function setBlockedPackages(packages: string[]): Promise<void> {
+  if (!canUseAccessibility()) {
+    return;
+  }
+  await updateBlockedPackages(packages);
+}
+
+export async function getBlockedPackagesList(): Promise<string[]> {
+  if (!canUseAccessibility()) {
+    return [];
+  }
+  return getBlockedPackages();
 }

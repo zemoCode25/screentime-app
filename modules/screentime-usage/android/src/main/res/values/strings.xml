@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_service_description">Helps enforce screen time limits by monitoring app usage. This service detects when apps with exceeded time limits are opened and shows a blocking screen.</string>
+</resources>

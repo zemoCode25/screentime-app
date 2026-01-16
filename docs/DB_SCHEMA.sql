@@ -94,6 +94,36 @@ create table if not exists public.app_limits (
   unique (child_id, package_name)
 );
 
+-- App access overrides: parent-granted temporary access past limits
+create table if not exists public.app_access_overrides (
+  id uuid primary key default gen_random_uuid(),
+  child_id uuid not null references public.children(id) on delete cascade,
+  package_name text not null,
+  granted_by_parent_id uuid not null references auth.users(id),
+  granted_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  duration_minutes integer not null,
+  reason text,
+  status text not null check (status in ('active', 'expired', 'revoked')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Override requests: child requests for more time
+create table if not exists public.override_requests (
+  id uuid primary key default gen_random_uuid(),
+  child_id uuid not null references public.children(id) on delete cascade,
+  package_name text not null,
+  app_name text not null,
+  requested_at timestamptz not null default now(),
+  status text not null check (status in ('pending', 'granted', 'denied')),
+  granted_by_parent_id uuid references auth.users(id),
+  responded_at timestamptz,
+  response_note text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 -- package_name null means child-level insight
 create table if not exists public.ai_insights (
   id uuid primary key default gen_random_uuid(),
@@ -142,6 +172,16 @@ create trigger set_updated_at_app_limits
 before update on public.app_limits
 for each row execute function public.set_updated_at();
 
+drop trigger if exists set_updated_at_app_access_overrides on public.app_access_overrides;
+create trigger set_updated_at_app_access_overrides
+before update on public.app_access_overrides
+for each row execute function public.set_updated_at();
+
+drop trigger if exists set_updated_at_override_requests on public.override_requests;
+create trigger set_updated_at_override_requests
+before update on public.override_requests
+for each row execute function public.set_updated_at();
+
 -- Indexes
 create index if not exists idx_children_parent on public.children(parent_user_id);
 create index if not exists idx_children_child_user on public.children(child_user_id);
@@ -154,6 +194,10 @@ create index if not exists idx_usage_child_date on public.app_usage_daily(child_
 create index if not exists idx_usage_child_package_date on public.app_usage_daily(child_id, package_name, usage_date);
 create index if not exists idx_limits_child on public.app_limits(child_id);
 create index if not exists idx_insights_child_date on public.ai_insights(child_id, insight_date);
+create index if not exists idx_app_access_overrides_child_package on public.app_access_overrides(child_id, package_name, status);
+create index if not exists idx_app_access_overrides_expires on public.app_access_overrides(expires_at) where status = 'active';
+create index if not exists idx_override_requests_child_status on public.override_requests(child_id, status);
+create index if not exists idx_override_requests_parent on public.override_requests(granted_by_parent_id, status);
 
 -- RLS
 alter table public.profiles enable row level security;
@@ -162,6 +206,8 @@ alter table public.child_devices enable row level security;
 alter table public.child_apps enable row level security;
 alter table public.app_usage_daily enable row level security;
 alter table public.app_limits enable row level security;
+alter table public.app_access_overrides enable row level security;
+alter table public.override_requests enable row level security;
 alter table public.ai_insights enable row level security;
 
 -- Profiles: user can read and edit their own row
@@ -313,6 +359,81 @@ for update using (
   exists (
     select 1 from public.children c
     where c.id = app_limits.child_id
+      and c.parent_user_id = auth.uid()
+  )
+);
+
+create policy "app_limits_delete_parent" on public.app_limits
+for delete using (
+  exists (
+    select 1 from public.children c
+    where c.id = app_limits.child_id
+      and c.parent_user_id = auth.uid()
+  )
+);
+
+-- App access overrides: parent can create/view/revoke, child can view
+create policy "app_access_overrides_select_parent_or_child" on public.app_access_overrides
+for select using (
+  exists (
+    select 1 from public.children c
+    where c.id = app_access_overrides.child_id
+      and (c.parent_user_id = auth.uid() or c.child_user_id = auth.uid())
+  )
+);
+
+create policy "app_access_overrides_insert_parent" on public.app_access_overrides
+for insert with check (
+  granted_by_parent_id = auth.uid()
+  and exists (
+    select 1 from public.children c
+    where c.id = app_access_overrides.child_id
+      and c.parent_user_id = auth.uid()
+  )
+);
+
+create policy "app_access_overrides_update_parent" on public.app_access_overrides
+for update using (
+  exists (
+    select 1 from public.children c
+    where c.id = app_access_overrides.child_id
+      and c.parent_user_id = auth.uid()
+  )
+);
+
+-- Override requests: child can create/view, parent can view/update
+create policy "override_requests_select_child" on public.override_requests
+for select using (
+  exists (
+    select 1 from public.children c
+    where c.id = override_requests.child_id
+      and c.child_user_id = auth.uid()
+  )
+);
+
+create policy "override_requests_insert_child" on public.override_requests
+for insert with check (
+  exists (
+    select 1 from public.children c
+    where c.id = override_requests.child_id
+      and c.child_user_id = auth.uid()
+  )
+);
+
+create policy "override_requests_select_parent" on public.override_requests
+for select using (
+  exists (
+    select 1 from public.children c
+    where c.id = override_requests.child_id
+      and c.parent_user_id = auth.uid()
+  )
+);
+
+create policy "override_requests_update_parent" on public.override_requests
+for update using (
+  exists (
+    select 1 from public.children c
+    where c.id = override_requests.child_id
       and c.parent_user_id = auth.uid()
   )
 );
