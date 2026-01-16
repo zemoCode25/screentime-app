@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -30,6 +30,14 @@ const COLORS = {
   error: "#DC2626",
   errorLight: "#FEF2F2",
 };
+
+const TIME_FILTERS = [
+  { key: "today", label: "Today", days: 1 },
+  { key: "7d", label: "7D", days: 7 },
+  { key: "30d", label: "30 Days", days: 30 },
+] as const;
+
+type TimeFilterKey = (typeof TIME_FILTERS)[number]["key"];
 
 const CHART_COLORS = {
   night: "#1E3A8A",
@@ -85,10 +93,18 @@ export default function ParentChildAppScreen() {
   const resolvedPackageName = Array.isArray(packageName)
     ? packageName[0]
     : packageName;
+  const [timeFilter, setTimeFilter] = useState<TimeFilterKey>("30d");
+  const selectedWindowDays =
+    TIME_FILTERS.find((option) => option.key === timeFilter)?.days ?? 30;
+  const windowLabel =
+    selectedWindowDays === 1
+      ? "Today"
+      : `Last ${selectedWindowDays} Days`;
 
   const { data, isLoading, error } = useChildAppDetailedUsage(
     resolvedChildId,
-    resolvedPackageName
+    resolvedPackageName,
+    selectedWindowDays
   );
 
   const chartData = useMemo(() => {
@@ -96,14 +112,14 @@ export default function ParentChildAppScreen() {
       return null;
     }
 
-    // Daily bar chart: last 7 days
-    const last7Days = data.dailyUsage.slice(-7);
+    // Daily bar chart: selected window
+    const dailyWindow = data.dailyUsage;
     const maxDailySeconds = Math.max(
-      ...last7Days.map((d) => d.totalSeconds),
+      ...dailyWindow.map((d) => d.totalSeconds),
       1
     );
 
-    const dailyBars = last7Days.map((row) => {
+    const dailyBars = dailyWindow.map((row) => {
       const dateObj = new Date(`${row.usageDate}T00:00:00Z`);
       return {
         date: row.usageDate,
@@ -264,9 +280,40 @@ export default function ParentChildAppScreen() {
               </View>
             </View>
 
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterRow}
+            >
+              {TIME_FILTERS.map((option) => {
+                const isActive = option.key === timeFilter;
+                return (
+                  <Pressable
+                    key={option.key}
+                    onPress={() => setTimeFilter(option.key)}
+                    style={({ pressed }) => [
+                      styles.filterChip,
+                      isActive && styles.filterChipActive,
+                      pressed && styles.filterChipPressed,
+                    ]}
+                  >
+                    <Text
+                      style={
+                        isActive
+                          ? styles.filterChipTextActive
+                          : styles.filterChipText
+                      }
+                    >
+                      {option.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
             {/* KPI Cards */}
             <Text style={styles.sectionTitle}>
-              Usage Summary (Last 30 Days)
+              Usage Summary ({windowLabel})
             </Text>
             <View style={styles.kpiGrid}>
               <View style={styles.kpiCard}>
@@ -347,9 +394,16 @@ export default function ParentChildAppScreen() {
 
             {/* Daily Usage Bar Chart */}
             <View style={styles.chartCard}>
-              <Text style={styles.chartTitle}>Daily Usage (Last 7 Days)</Text>
+              <Text style={styles.chartTitle}>
+                Daily Usage ({windowLabel})
+              </Text>
               {hasDailyData && chartData ? (
-                <View style={styles.barChart}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.barChartScroll}
+                  contentContainerStyle={styles.barChart}
+                >
                   {chartData.dailyBars.map((bar) => (
                     <View key={bar.date} style={styles.barColumn}>
                       <View style={styles.barTrack}>
@@ -366,7 +420,7 @@ export default function ParentChildAppScreen() {
                       <Text style={styles.barLabel}>{bar.label}</Text>
                     </View>
                   ))}
-                </View>
+                </ScrollView>
               ) : (
                 <Text style={styles.chartEmpty}>No daily usage data yet.</Text>
               )}
@@ -374,7 +428,9 @@ export default function ParentChildAppScreen() {
 
             {/* Time of Day Pie Chart */}
             <View style={styles.chartCard}>
-              <Text style={styles.chartTitle}>Usage by Time of Day</Text>
+              <Text style={styles.chartTitle}>
+                Usage by Time of Day ({windowLabel})
+              </Text>
               {hasHourlyData && chartData ? (
                 <View style={styles.pieRow}>
                   <Svg width={112} height={112} viewBox="0 0 112 112">
@@ -548,6 +604,36 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
     marginTop: 4,
   },
+  filterRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingBottom: 4,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  filterChipActive: {
+    backgroundColor: COLORS.primaryLight,
+    borderColor: COLORS.primary,
+  },
+  filterChipPressed: {
+    opacity: 0.9,
+  },
+  filterChipText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_600SemiBold",
+  },
+  filterChipTextActive: {
+    fontSize: 12,
+    color: COLORS.primaryDark,
+    fontFamily: "Inter_700Bold",
+  },
   kpiGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -619,14 +705,17 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingVertical: 20,
   },
-  barChart: {
+  barChartScroll: {
     height: 160,
+  },
+  barChart: {
     flexDirection: "row",
     alignItems: "flex-end",
     gap: 8,
+    paddingHorizontal: 4,
   },
   barColumn: {
-    flex: 1,
+    width: 32,
     alignItems: "center",
     justifyContent: "flex-end",
     gap: 8,

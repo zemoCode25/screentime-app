@@ -40,8 +40,10 @@ class BlockingActivity : ReactActivity() {
 
     override fun getLaunchOptions(): Bundle? {
         val blockedPackage = intent.getStringExtra("blocked_package") ?: ""
+        val blockReason = AppBlockingService.getBlockReason(this, blockedPackage) ?: "app_limit"
         val bundle = Bundle()
         bundle.putString("blockedPackage", blockedPackage)
+        bundle.putString("blockReason", blockReason)
         return bundle
     }
 

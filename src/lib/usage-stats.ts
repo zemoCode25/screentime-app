@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 import {
   getAppIconBase64,
   getBlockedPackages,
+  getBlockReason,
   getInstalledApps,
   getUsageStats,
   isAccessibilityEnabled,
@@ -10,6 +11,8 @@ import {
   openUsageAccessSettings,
   requestAccessibilityPermission,
   updateBlockedPackages,
+  updateBlockedPackagesWithReasons,
+  type BlockedPackageWithReason,
 } from "screentime-usage";
 
 export type InstalledApp = {
@@ -109,4 +112,22 @@ export async function fetchAppIconBase64(
     return null;
   }
   return getAppIconBase64(packageName);
+}
+
+export async function setBlockedPackagesWithReasons(
+  packages: BlockedPackageWithReason[]
+): Promise<void> {
+  if (!canUseAccessibility()) {
+    return;
+  }
+  await updateBlockedPackagesWithReasons(packages);
+}
+
+export async function fetchBlockReason(
+  packageName: string
+): Promise<string | null> {
+  if (!canUseAccessibility()) {
+    return null;
+  }
+  return getBlockReason(packageName);
 }

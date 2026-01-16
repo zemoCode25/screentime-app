@@ -1,5 +1,10 @@
 import { requireOptionalNativeModule } from "expo-modules-core";
 
+export type BlockedPackageWithReason = {
+  packageName: string;
+  reason: string;
+};
+
 type UsageStatsModuleType = {
   isUsageAccessGranted: () => boolean;
   openUsageAccessSettings: () => void;
@@ -24,7 +29,11 @@ type UsageStatsModuleType = {
   isAccessibilityEnabled: () => boolean;
   requestAccessibilityPermission: () => void;
   updateBlockedPackages: (packages: string[]) => Promise<void>;
+  updateBlockedPackagesWithReasons: (
+    packages: BlockedPackageWithReason[]
+  ) => Promise<void>;
   getBlockedPackages: () => Promise<string[]>;
+  getBlockReason: (packageName: string) => Promise<string | null>;
   getAppIconBase64: (packageName: string) => Promise<string | null>;
 };
 
@@ -75,5 +84,20 @@ export function getBlockedPackages() {
 export function getAppIconBase64(packageName: string) {
   return (
     UsageStatsModule?.getAppIconBase64?.(packageName) ?? Promise.resolve(null)
+  );
+}
+
+export function updateBlockedPackagesWithReasons(
+  packages: BlockedPackageWithReason[]
+) {
+  return (
+    UsageStatsModule?.updateBlockedPackagesWithReasons?.(packages) ??
+    Promise.resolve()
+  );
+}
+
+export function getBlockReason(packageName: string) {
+  return (
+    UsageStatsModule?.getBlockReason?.(packageName) ?? Promise.resolve(null)
   );
 }

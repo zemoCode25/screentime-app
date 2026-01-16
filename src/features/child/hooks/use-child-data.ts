@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/src/features/auth/hooks/use-auth";
 import {
   fetchChildApps,
+  fetchChildConstraints,
   fetchChildForUser,
   fetchChildLimits,
   fetchChildUsageDaily,
@@ -51,5 +52,14 @@ export function useChildLimits(childId?: string) {
     queryKey: ["child", "limits", childId],
     queryFn: () => fetchChildLimits(childId as string),
     enabled: Boolean(childId),
+  });
+}
+
+export function useChildConstraints(childId?: string) {
+  return useQuery({
+    queryKey: ["child", "constraints", childId],
+    queryFn: () => fetchChildConstraints(childId as string),
+    enabled: Boolean(childId),
+    staleTime: 60_000, // Refetch every minute
   });
 }

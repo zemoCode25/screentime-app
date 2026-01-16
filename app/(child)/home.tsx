@@ -17,16 +17,16 @@ import Svg, { Path } from "react-native-svg";
 import { useAuth } from "@/src/features/auth/hooks/use-auth";
 import {
   useChildApps,
+  useChildConstraints,
   useChildLimits,
   useChildProfile,
   useChildUsageDaily,
   useChildUsageHourly,
 } from "@/src/features/child/hooks/use-child-data";
-import { calculateBlockedPackages } from "@/src/features/child/services/blocking-enforcement";
 import { type AppLimitRow } from "@/src/features/child/services/child-service";
+import { constraintEnforcementManager } from "@/src/features/child/services/constraint-enforcement-manager";
 import { syncChildDeviceUsage } from "@/src/features/child/services/device-usage-sync";
-import { fetchActiveOverrides } from "@/src/features/child/services/override-service";
-import { canUseUsageStats, setBlockedPackages } from "@/src/lib/usage-stats";
+import { canUseUsageStats } from "@/src/lib/usage-stats";
 import {
   APP_CATEGORY_ORDER,
   getAppCategoryLabel,
@@ -58,11 +58,53 @@ const CHART_COLORS = {
 };
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAY_SHORT_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const formatHourLabel = (hour: number) => {
   const hour12 = ((hour + 11) % 12) + 1;
   const period = hour >= 12 ? "PM" : "AM";
   return `${hour12} ${period}`;
+};
+
+const formatTimeFromSeconds = (seconds: number) => {
+  const normalized = ((seconds % 86400) + 86400) % 86400;
+  const hours = Math.floor(normalized / 3600);
+  const minutes = Math.floor((normalized % 3600) / 60);
+  const hour12 = ((hours + 11) % 12) + 1;
+  const period = hours >= 12 ? "PM" : "AM";
+  const minuteStr = minutes > 0 ? `:${String(minutes).padStart(2, "0")}` : "";
+  return `${hour12}${minuteStr} ${period}`;
+};
+
+const formatDaysShort = (days: number[]) => {
+  if (!days || days.length === 0) return "No days";
+  if (days.length === 7) return "Every day";
+  const weekdays = [1, 2, 3, 4, 5];
+  const weekends = [0, 6];
+  if (
+    days.length === 5 &&
+    weekdays.every((d) => days.includes(d)) &&
+    !days.includes(0) &&
+    !days.includes(6)
+  ) {
+    return "Weekdays";
+  }
+  if (days.length === 2 && weekends.every((d) => days.includes(d))) {
+    return "Weekends";
+  }
+  return days
+    .sort((a, b) => a - b)
+    .map((d) => DAY_SHORT_LABELS[d])
+    .join(", ");
+};
+
+const formatDurationHM = (seconds: number) => {
+  if (seconds <= 0) return "0m";
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours === 0) return `${minutes}m`;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${minutes}m`;
 };
 
 const formatHourRangeLabel = (hour: number) => {
@@ -332,14 +374,49 @@ export default function ChildHomeScreen() {
     error: limitsError,
   } = useChildLimits(childId);
 
+  const {
+    data: constraints,
+    isLoading: constraintsLoading,
+    error: constraintsError,
+  } = useChildConstraints(childId);
+
   const isLoading =
     childLoading ||
     appsLoading ||
     usageLoading ||
     usageHourlyLoading ||
-    limitsLoading;
+    limitsLoading ||
+    constraintsLoading;
   const error =
-    childError ?? appsError ?? usageError ?? usageHourlyError ?? limitsError;
+    childError ??
+    appsError ??
+    usageError ??
+    usageHourlyError ??
+    limitsError ??
+    constraintsError;
+
+  // Process constraints data
+  const bedtimes = useMemo(() => {
+    if (!constraints?.timeRules) return [];
+    return constraints.timeRules.filter((rule) => rule.rule_type === "bedtime");
+  }, [constraints?.timeRules]);
+
+  const focusTimes = useMemo(() => {
+    if (!constraints?.timeRules) return [];
+    return constraints.timeRules.filter(
+      (rule) => rule.rule_type === "focus_time"
+    );
+  }, [constraints?.timeRules]);
+
+  const dailyLimitSeconds =
+    constraints?.usageSettings?.daily_limit_seconds ?? 0;
+  const weekendBonusSeconds =
+    constraints?.usageSettings?.weekend_bonus_seconds ?? 0;
+  const hasConstraints =
+    bedtimes.length > 0 ||
+    focusTimes.length > 0 ||
+    dailyLimitSeconds > 0 ||
+    weekendBonusSeconds > 0;
 
   const {
     appCards,
@@ -528,6 +605,16 @@ export default function ChildHomeScreen() {
     setVisibleAppCount(15);
   }, [selectedCategory]);
 
+  // Start/stop constraint enforcement manager
+  useEffect(() => {
+    if (childId) {
+      constraintEnforcementManager.start(childId);
+    }
+    return () => {
+      constraintEnforcementManager.stop();
+    };
+  }, [childId]);
+
   const selectedApp = useMemo(() => {
     if (selectableApps.length === 0) {
       return null;
@@ -715,80 +802,14 @@ export default function ChildHomeScreen() {
       );
       await queryClient.invalidateQueries({ queryKey: ["child"] });
 
-      // Update app blocking enforcement
-      await updateBlockingEnforcement(childId);
+      // Update constraint enforcement (bedtime, focus, limits)
+      await constraintEnforcementManager.evaluateNow();
     } catch (err) {
       setSyncError(
         err instanceof Error ? err.message : "Failed to sync device usage."
       );
     } finally {
       setIsSyncing(false);
-    }
-  };
-
-  const updateBlockingEnforcement = async (childId: string) => {
-    try {
-      // Fetch necessary data
-      const [limits, overrides, usageData] = await Promise.all([
-        queryClient.fetchQuery({
-          queryKey: ["child", "limits", childId],
-          queryFn: async () => {
-            const { data, error } = await (
-              await import("@/lib/supabase")
-            ).supabase
-              .from("app_limits")
-              .select("*")
-              .eq("child_id", childId);
-            if (error) throw error;
-            return data ?? [];
-          },
-        }),
-        fetchActiveOverrides(childId),
-        queryClient.fetchQuery({
-          queryKey: ["child", "usage-daily", childId, "today"],
-          queryFn: async () => {
-            const today = new Date();
-            const year = today.getFullYear();
-            const month = String(today.getMonth() + 1).padStart(2, "0");
-            const day = String(today.getDate()).padStart(2, "0");
-            const todayDate = `${year}-${month}-${day}`;
-
-            const { data, error } = await (
-              await import("@/lib/supabase")
-            ).supabase
-              .from("app_usage_daily")
-              .select("package_name,total_seconds")
-              .eq("child_id", childId)
-              .eq("usage_date", todayDate);
-
-            if (error) throw error;
-            return data ?? [];
-          },
-        }),
-      ]);
-
-      // Build usage map for today
-      const usageToday = new Map<string, number>();
-      for (const row of usageData) {
-        usageToday.set(row.package_name, row.total_seconds ?? 0);
-      }
-
-      // Calculate which apps should be blocked
-      const blockedPackages = calculateBlockedPackages(
-        limits,
-        usageToday,
-        overrides
-      );
-
-      // Update native module with blocked packages
-      await setBlockedPackages(blockedPackages);
-
-      console.log(
-        `Blocking enforcement updated: ${blockedPackages.length} apps blocked`
-      );
-    } catch (err) {
-      console.error("Failed to update blocking enforcement:", err);
-      // Don't throw - blocking enforcement is optional, don't break sync
     }
   };
 
@@ -888,6 +909,127 @@ export default function ChildHomeScreen() {
           ) : null}
           {syncError ? <Text style={styles.syncError}>{syncError}</Text> : null}
         </View>
+
+        {/* My Rules Section */}
+        {hasConstraints ? (
+          <View style={styles.rulesCard}>
+            <View style={styles.rulesHeader}>
+              <View style={styles.rulesIconBox}>
+                <Ionicons
+                  name="shield-checkmark"
+                  size={20}
+                  color={COLORS.primary}
+                />
+              </View>
+              <View>
+                <Text style={styles.rulesTitle}>My Rules</Text>
+                <Text style={styles.rulesSubtitle}>Set by your parent</Text>
+              </View>
+            </View>
+
+            <View style={styles.rulesGrid}>
+              {/* Bedtime */}
+              {bedtimes.length > 0 ? (
+                <View style={styles.ruleItem}>
+                  <View
+                    style={[
+                      styles.ruleIconBadge,
+                      { backgroundColor: "#EDE9FE" },
+                    ]}
+                  >
+                    <Ionicons name="moon" size={16} color="#7C3AED" />
+                  </View>
+                  <View style={styles.ruleContent}>
+                    <Text style={styles.ruleLabel}>Bedtime</Text>
+                    {bedtimes.map((rule, idx) => (
+                      <View key={rule.id ?? idx} style={styles.ruleDetail}>
+                        <Text style={styles.ruleTime}>
+                          {formatTimeFromSeconds(rule.start_seconds ?? 0)} –{" "}
+                          {formatTimeFromSeconds(rule.end_seconds ?? 0)}
+                        </Text>
+                        <Text style={styles.ruleDays}>
+                          {formatDaysShort(rule.days ?? [])}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+
+              {/* Focus Time */}
+              {focusTimes.length > 0 ? (
+                <View style={styles.ruleItem}>
+                  <View
+                    style={[
+                      styles.ruleIconBadge,
+                      { backgroundColor: "#FEF3C7" },
+                    ]}
+                  >
+                    <Ionicons name="flash" size={16} color="#D97706" />
+                  </View>
+                  <View style={styles.ruleContent}>
+                    <Text style={styles.ruleLabel}>Focus Time</Text>
+                    {focusTimes.map((rule, idx) => (
+                      <View key={rule.id ?? idx} style={styles.ruleDetail}>
+                        <Text style={styles.ruleTime}>
+                          {formatTimeFromSeconds(rule.start_seconds ?? 0)} –{" "}
+                          {formatTimeFromSeconds(rule.end_seconds ?? 0)}
+                        </Text>
+                        <Text style={styles.ruleDays}>
+                          {formatDaysShort(rule.days ?? [])}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+
+              {/* Daily Limit */}
+              {dailyLimitSeconds > 0 ? (
+                <View style={styles.ruleItem}>
+                  <View
+                    style={[
+                      styles.ruleIconBadge,
+                      { backgroundColor: "#DBEAFE" },
+                    ]}
+                  >
+                    <Ionicons name="time" size={16} color={COLORS.primary} />
+                  </View>
+                  <View style={styles.ruleContent}>
+                    <Text style={styles.ruleLabel}>Daily Limit</Text>
+                    <Text style={styles.ruleValue}>
+                      {formatDurationHM(dailyLimitSeconds)}
+                    </Text>
+                    <Text style={styles.ruleHint}>
+                      Total screen time per day
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+
+              {/* Weekend Bonus */}
+              {weekendBonusSeconds > 0 ? (
+                <View style={styles.ruleItem}>
+                  <View
+                    style={[
+                      styles.ruleIconBadge,
+                      { backgroundColor: "#D1FAE5" },
+                    ]}
+                  >
+                    <Ionicons name="gift" size={16} color={COLORS.success} />
+                  </View>
+                  <View style={styles.ruleContent}>
+                    <Text style={styles.ruleLabel}>Weekend Bonus</Text>
+                    <Text style={styles.ruleValue}>
+                      +{formatDurationHM(weekendBonusSeconds)}
+                    </Text>
+                    <Text style={styles.ruleHint}>Extra time on weekends</Text>
+                  </View>
+                </View>
+              ) : null}
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.rangeRow}>
           {rangeKeys.map((rangeKey) => {
@@ -2000,5 +2142,97 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.success,
     fontFamily: "Inter_500Medium",
+  },
+  // My Rules section styles
+  rulesCard: {
+    padding: 16,
+    borderRadius: 20,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 16,
+  },
+  rulesHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  rulesIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: COLORS.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rulesTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: COLORS.text,
+    fontFamily: "Inter_700Bold",
+  },
+  rulesSubtitle: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_400Regular",
+    marginTop: 2,
+  },
+  rulesGrid: {
+    gap: 12,
+  },
+  ruleItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  ruleIconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ruleContent: {
+    flex: 1,
+    gap: 2,
+  },
+  ruleLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.text,
+    fontFamily: "Inter_600SemiBold",
+  },
+  ruleDetail: {
+    marginTop: 4,
+  },
+  ruleTime: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: COLORS.text,
+    fontFamily: "Inter_700Bold",
+  },
+  ruleDays: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_400Regular",
+    marginTop: 2,
+  },
+  ruleValue: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: COLORS.text,
+    fontFamily: "Inter_700Bold",
+    marginTop: 2,
+  },
+  ruleHint: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_400Regular",
+    marginTop: 2,
   },
 });

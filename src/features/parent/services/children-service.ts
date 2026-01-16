@@ -140,9 +140,11 @@ export async function fetchChildApps(childId: string): Promise<ChildAppRow[]> {
 }
 
 export async function fetchChildUsageSummary(
-  childId: string
+  childId: string,
+  windowDays: number = CHILD_USAGE_WINDOW_DAYS
 ): Promise<ChildUsageSummary> {
-  const startDate = getDateDaysAgo(CHILD_USAGE_WINDOW_DAYS);
+  const resolvedWindowDays = Math.max(1, windowDays);
+  const startDate = getDateDaysAgo(resolvedWindowDays - 1);
 
   const { data: usageRows, error } = await supabase
     .from("app_usage_daily")
@@ -181,7 +183,7 @@ export async function fetchChildUsageSummary(
 
   return {
     totalSeconds,
-    avgDailySeconds: totalSeconds / CHILD_USAGE_WINDOW_DAYS,
+    avgDailySeconds: totalSeconds / resolvedWindowDays,
     activeDays: activeDays.size,
     mostUsedPackage,
   };
@@ -194,9 +196,11 @@ export type AppUsageDetail = {
 };
 
 export async function fetchChildAppUsageDetails(
-  childId: string
+  childId: string,
+  windowDays: number = CHILD_USAGE_WINDOW_DAYS
 ): Promise<AppUsageDetail[]> {
-  const startDate = getDateDaysAgo(CHILD_USAGE_WINDOW_DAYS);
+  const resolvedWindowDays = Math.max(1, windowDays);
+  const startDate = getDateDaysAgo(resolvedWindowDays - 1);
 
   const { data: usageRows, error } = await supabase
     .from("app_usage_daily")
@@ -256,9 +260,11 @@ export type AppDetailedUsage = {
 
 export async function fetchChildAppDetailedUsage(
   childId: string,
-  packageName: string
+  packageName: string,
+  windowDays: number = CHILD_USAGE_WINDOW_DAYS
 ): Promise<AppDetailedUsage> {
-  const startDate = getDateDaysAgo(CHILD_USAGE_WINDOW_DAYS);
+  const resolvedWindowDays = Math.max(1, windowDays);
+  const startDate = getDateDaysAgo(resolvedWindowDays - 1);
 
   // Fetch app info
   const { data: appData, error: appError } = await supabase
@@ -331,7 +337,7 @@ export async function fetchChildAppDetailedUsage(
     packageName,
     totalSeconds,
     totalOpenCount,
-    avgDailySeconds: totalSeconds / CHILD_USAGE_WINDOW_DAYS,
+    avgDailySeconds: totalSeconds / resolvedWindowDays,
     activeDays: activeDaysSet.size,
     dailyUsage,
     hourlyUsage,

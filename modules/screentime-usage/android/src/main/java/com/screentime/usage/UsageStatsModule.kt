@@ -99,9 +99,19 @@ class UsageStatsModule : Module() {
       AppBlockingService.updateBlockedPackages(context, packages.toSet())
     }
 
+    AsyncFunction("updateBlockedPackagesWithReasons") { packages: List<Map<String, String>> ->
+      val context = appContext.reactContext ?: return@AsyncFunction null
+      AppBlockingService.updateBlockedPackagesWithReasons(context, packages)
+    }
+
     AsyncFunction("getBlockedPackages") {
       val context = appContext.reactContext ?: return@AsyncFunction emptyList<String>()
       AppBlockingService.getBlockedPackages(context).toList()
+    }
+
+    AsyncFunction("getBlockReason") { packageName: String ->
+      val context = appContext.reactContext ?: return@AsyncFunction null
+      AppBlockingService.getBlockReason(context, packageName)
     }
 
     AsyncFunction("getAppIconBase64") { packageName: String ->

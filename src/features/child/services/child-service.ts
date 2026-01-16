@@ -7,6 +7,10 @@ type AppUsageRowFull = Database["public"]["Tables"]["app_usage_daily"]["Row"];
 type AppUsageHourlyRowFull =
   Database["public"]["Tables"]["app_usage_hourly"]["Row"];
 type AppLimitRowFull = Database["public"]["Tables"]["app_limits"]["Row"];
+type ChildTimeRuleRowFull =
+  Database["public"]["Tables"]["child_time_rules"]["Row"];
+type ChildUsageSettingsRowFull =
+  Database["public"]["Tables"]["child_usage_settings"]["Row"];
 
 // Partial types for the fields we actually select
 export type ChildAppRow = Pick<
@@ -40,6 +44,21 @@ export type AppLimitRow = Pick<
   | "applies_fri"
   | "applies_sat"
 >;
+
+export type ChildTimeRuleRow = Pick<
+  ChildTimeRuleRowFull,
+  "id" | "rule_type" | "days" | "start_seconds" | "end_seconds"
+>;
+
+export type ChildUsageSettingsRow = Pick<
+  ChildUsageSettingsRowFull,
+  "daily_limit_seconds" | "weekend_bonus_seconds"
+>;
+
+export type ChildConstraints = {
+  timeRules: ChildTimeRuleRow[];
+  usageSettings: ChildUsageSettingsRow | null;
+};
 
 type MockAppSeed = {
   appName: string;
@@ -215,6 +234,39 @@ export async function fetchChildLimits(
   }
 
   return data ?? [];
+}
+
+/**
+ * Fetches constraint settings for a child (time rules and usage settings)
+ */
+export async function fetchChildConstraints(
+  childId: string
+): Promise<ChildConstraints> {
+  // Fetch time rules and usage settings in parallel
+  const [timeRulesResult, usageSettingsResult] = await Promise.all([
+    supabase
+      .from("child_time_rules")
+      .select("id,rule_type,days,start_seconds,end_seconds")
+      .eq("child_id", childId),
+    supabase
+      .from("child_usage_settings")
+      .select("daily_limit_seconds,weekend_bonus_seconds")
+      .eq("child_id", childId)
+      .maybeSingle(),
+  ]);
+
+  if (timeRulesResult.error) {
+    throw new Error(timeRulesResult.error.message);
+  }
+
+  if (usageSettingsResult.error) {
+    throw new Error(usageSettingsResult.error.message);
+  }
+
+  return {
+    timeRules: timeRulesResult.data ?? [],
+    usageSettings: usageSettingsResult.data,
+  };
 }
 
 export async function seedChildMockUsage(childId: string) {
