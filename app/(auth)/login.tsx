@@ -1,5 +1,10 @@
+import { useAuth } from "@/src/features/auth/hooks/use-auth";
+import {
+  loginSchema,
+  type LoginFormValues,
+} from "@/src/features/auth/validation/login-schema";
 import { Ionicons } from "@expo/vector-icons";
-import { Link } from "expo-router";
+import { Link, Stack } from "expo-router";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
@@ -13,11 +18,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useAuth } from "@/src/features/auth/hooks/use-auth";
-import {
-  loginSchema,
-  type LoginFormValues,
-} from "@/src/features/auth/validation/login-schema";
 
 // Modern blue accent color palette
 const COLORS = {
@@ -76,6 +76,9 @@ export default function LoginScreen() {
       style={styles.keyboardView}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
+      <Stack.Screen
+        options={{ gestureEnabled: false, headerBackButtonMenuEnabled: false }}
+      />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="always"

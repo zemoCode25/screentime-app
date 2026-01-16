@@ -29,6 +29,7 @@ create table if not exists public.profiles (
 create table if not exists public.children (
   id uuid primary key default gen_random_uuid(),
   parent_user_id uuid not null references auth.users(id) on delete cascade,
+  child_email text not null,
   child_user_id uuid unique references auth.users(id) on delete set null,
   name text not null,
   age integer check (age >= 0 and age <= 21),
@@ -144,6 +145,8 @@ for each row execute function public.set_updated_at();
 -- Indexes
 create index if not exists idx_children_parent on public.children(parent_user_id);
 create index if not exists idx_children_child_user on public.children(child_user_id);
+create unique index if not exists idx_children_child_email_unique
+  on public.children (lower(child_email));
 create index if not exists idx_child_devices_child on public.child_devices(child_id);
 create index if not exists idx_child_apps_child on public.child_apps(child_id);
 create index if not exists idx_child_apps_package on public.child_apps(package_name);
@@ -178,11 +181,26 @@ for select using (
   or child_user_id = auth.uid()
 );
 
+create policy "children_select_by_email" on public.children
+for select using (
+  lower(child_email) = lower(auth.jwt() ->> 'email')
+);
+
 create policy "children_insert_parent" on public.children
 for insert with check (parent_user_id = auth.uid());
 
 create policy "children_update_parent" on public.children
 for update using (parent_user_id = auth.uid());
+
+create policy "children_update_child_claim" on public.children
+for update using (
+  child_user_id is null
+  and lower(child_email) = lower(auth.jwt() ->> 'email')
+)
+with check (
+  child_user_id = auth.uid()
+  and lower(child_email) = lower(auth.jwt() ->> 'email')
+);
 
 create policy "children_delete_parent" on public.children
 for delete using (parent_user_id = auth.uid());

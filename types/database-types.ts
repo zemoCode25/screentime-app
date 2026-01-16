@@ -318,6 +318,7 @@ export type Database = {
       children: {
         Row: {
           age: number;
+          child_email: string;
           child_user_id: string | null;
           created_at: string;
           grade_level: string | null;
@@ -329,6 +330,7 @@ export type Database = {
         };
         Insert: {
           age: number;
+          child_email: string;
           child_user_id?: string | null;
           created_at?: string;
           grade_level?: string | null;
@@ -340,6 +342,7 @@ export type Database = {
         };
         Update: {
           age?: number;
+          child_email?: string;
           child_user_id?: string | null;
           created_at?: string;
           grade_level?: string | null;
