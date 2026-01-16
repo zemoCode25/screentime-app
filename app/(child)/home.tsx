@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,8 +21,10 @@ import {
   useChildUsageDaily,
   useChildUsageHourly,
 } from "@/src/features/child/hooks/use-child-data";
+import { calculateBlockedPackages } from "@/src/features/child/services/blocking-enforcement";
 import { syncChildDeviceUsage } from "@/src/features/child/services/device-usage-sync";
-import { canUseUsageStats } from "@/src/lib/usage-stats";
+import { fetchActiveOverrides } from "@/src/features/child/services/override-service";
+import { canUseUsageStats, setBlockedPackages } from "@/src/lib/usage-stats";
 import {
   APP_CATEGORY_ORDER,
   getAppCategoryLabel,
@@ -195,6 +198,92 @@ const getLimitSecondsForDate = (limit: AppLimitRow, date: Date) => {
   return limit.limit_seconds + bonusSeconds;
 };
 
+const Skeleton = ({
+  style,
+  borderRadius = 12,
+}: {
+  style?: any;
+  borderRadius?: number;
+}) => {
+  const opacity = useMemo(() => new Animated.Value(0.3), []);
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, {
+          toValue: 0.7,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 0.3,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [opacity]);
+
+  return (
+    <Animated.View
+      style={[{ backgroundColor: "#CBD5E1", opacity, borderRadius }, style]}
+    />
+  );
+};
+
+const ChildDashboardSkeleton = () => {
+  return (
+    <SafeAreaView style={styles.screen} edges={["top"]}>
+      <View style={styles.backgroundGlowTop} />
+      <View style={styles.content}>
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+            <Skeleton style={{ width: 48, height: 48 }} borderRadius={16} />
+            <View style={{ gap: 8 }}>
+              <Skeleton style={{ width: 100, height: 24 }} borderRadius={6} />
+              <Skeleton style={{ width: 60, height: 16 }} borderRadius={4} />
+            </View>
+          </View>
+          <Skeleton style={{ width: 40, height: 40 }} borderRadius={20} />
+        </View>
+
+        {/* Sync Card */}
+        <Skeleton style={{ width: "100%", height: 80 }} borderRadius={18} />
+
+        {/* Range Tabs */}
+        <View style={styles.rangeRow}>
+          <Skeleton style={{ flex: 1, height: 36 }} borderRadius={999} />
+          <Skeleton style={{ flex: 1, height: 36 }} borderRadius={999} />
+          <Skeleton style={{ flex: 1, height: 36 }} borderRadius={999} />
+        </View>
+
+        {/* Hero Card / Stats */}
+        <Skeleton style={{ width: "100%", height: 180 }} borderRadius={24} />
+
+        {/* Stats Grid */}
+        <View style={styles.statsGrid}>
+          <Skeleton style={{ flex: 1, height: 100 }} borderRadius={20} />
+          <Skeleton style={{ flex: 1, height: 100 }} borderRadius={20} />
+        </View>
+
+        {/* Apps Section */}
+        <View style={{ gap: 16, marginTop: 10 }}>
+          <Skeleton style={{ width: 140, height: 24 }} borderRadius={6} />
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <Skeleton style={{ width: 60, height: 30 }} borderRadius={999} />
+            <Skeleton style={{ width: 80, height: 30 }} borderRadius={999} />
+            <Skeleton style={{ width: 70, height: 30 }} borderRadius={999} />
+          </View>
+          <Skeleton style={{ width: "100%", height: 72 }} borderRadius={16} />
+          <Skeleton style={{ width: "100%", height: 72 }} borderRadius={16} />
+          <Skeleton style={{ width: "100%", height: 72 }} borderRadius={16} />
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+};
+
 export default function ChildHomeScreen() {
   const { profile, signOut } = useAuth();
   const queryClient = useQueryClient();
@@ -249,6 +338,10 @@ export default function ChildHomeScreen() {
     limitsLoading;
   const error =
     childError ?? appsError ?? usageError ?? usageHourlyError ?? limitsError;
+
+  if (isLoading) {
+    return <ChildDashboardSkeleton />;
+  }
 
   const {
     appCards,
@@ -617,12 +710,81 @@ export default function ChildHomeScreen() {
         `Synced ${result.appsSynced} apps and ${result.usageRows} usage rows.`
       );
       await queryClient.invalidateQueries({ queryKey: ["child"] });
+
+      // Update app blocking enforcement
+      await updateBlockingEnforcement(childId);
     } catch (err) {
       setSyncError(
         err instanceof Error ? err.message : "Failed to sync device usage."
       );
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const updateBlockingEnforcement = async (childId: string) => {
+    try {
+      // Fetch necessary data
+      const [limits, overrides, usageData] = await Promise.all([
+        queryClient.fetchQuery({
+          queryKey: ["child", "limits", childId],
+          queryFn: async () => {
+            const { data, error } = await (
+              await import("@/lib/supabase")
+            ).supabase
+              .from("app_limits")
+              .select("*")
+              .eq("child_id", childId);
+            if (error) throw error;
+            return data ?? [];
+          },
+        }),
+        fetchActiveOverrides(childId),
+        queryClient.fetchQuery({
+          queryKey: ["child", "usage-daily", childId, "today"],
+          queryFn: async () => {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, "0");
+            const day = String(today.getDate()).padStart(2, "0");
+            const todayDate = `${year}-${month}-${day}`;
+
+            const { data, error } = await (
+              await import("@/lib/supabase")
+            ).supabase
+              .from("app_usage_daily")
+              .select("package_name,total_seconds")
+              .eq("child_id", childId)
+              .eq("usage_date", todayDate);
+
+            if (error) throw error;
+            return data ?? [];
+          },
+        }),
+      ]);
+
+      // Build usage map for today
+      const usageToday = new Map<string, number>();
+      for (const row of usageData) {
+        usageToday.set(row.package_name, row.total_seconds ?? 0);
+      }
+
+      // Calculate which apps should be blocked
+      const blockedPackages = calculateBlockedPackages(
+        limits,
+        usageToday,
+        overrides
+      );
+
+      // Update native module with blocked packages
+      await setBlockedPackages(blockedPackages);
+
+      console.log(
+        `Blocking enforcement updated: ${blockedPackages.length} apps blocked`
+      );
+    } catch (err) {
+      console.error("Failed to update blocking enforcement:", err);
+      // Don't throw - blocking enforcement is optional, don't break sync
     }
   };
 
@@ -753,13 +915,6 @@ export default function ChildHomeScreen() {
           <View style={styles.errorCard}>
             <Ionicons name="alert-circle" size={20} color={COLORS.error} />
             <Text style={styles.errorText}>{error.message}</Text>
-          </View>
-        ) : null}
-
-        {isLoading ? (
-          <View style={styles.loadingCard}>
-            <ActivityIndicator color={COLORS.primary} />
-            <Text style={styles.loadingText}>Loading your day...</Text>
           </View>
         ) : null}
 

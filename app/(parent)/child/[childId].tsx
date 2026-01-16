@@ -269,7 +269,22 @@ export default function ParentChildScreen() {
           ) : (
             <>
               {visibleApps.map((app, index) => (
-                <View key={app.id} style={styles.appRow}>
+                <Pressable
+                  key={app.id}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/(parent)/child/app/[packageName]",
+                      params: {
+                        childId: resolvedChildId,
+                        packageName: app.package_name,
+                      },
+                    })
+                  }
+                  style={({ pressed }) => [
+                    styles.appRow,
+                    pressed && styles.appRowPressed,
+                  ]}
+                >
                   <View style={styles.rankBadge}>
                     <Text style={styles.rankText}>#{index + 1}</Text>
                   </View>
@@ -294,16 +309,12 @@ export default function ParentChildScreen() {
                   </View>
                   <View style={styles.appStatus}>
                     <Ionicons
-                      name={
-                        app.totalSeconds > 0
-                          ? "trending-up"
-                          : "checkmark-circle"
-                      }
-                      size={16}
-                      color={app.totalSeconds > 0 ? COLORS.primary : "#16A34A"}
+                      name="chevron-forward"
+                      size={18}
+                      color={COLORS.textSecondary}
                     />
                   </View>
-                </View>
+                </Pressable>
               ))}
               {hasMoreApps ? (
                 <Pressable
@@ -324,11 +335,7 @@ export default function ParentChildScreen() {
                 </Pressable>
               ) : sortedApps.length > 15 ? (
                 <View style={styles.allLoadedCard}>
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={20}
-                    color="#16A34A"
-                  />
+                  <Ionicons name="checkmark-circle" size={20} color="#16A34A" />
                   <Text style={styles.allLoadedText}>
                     All {sortedApps.length} apps loaded
                   </Text>
@@ -620,6 +627,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
+  },
+  appRowPressed: {
+    backgroundColor: "#F8FAFC",
   },
   rankBadge: {
     width: 32,

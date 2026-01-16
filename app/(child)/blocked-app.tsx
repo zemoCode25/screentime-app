@@ -1,16 +1,24 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
-import { useAuth } from "@/src/contexts/auth-context";
+import { useChildProfile } from "@/src/features/child/hooks/use-child-data";
 import { useCreateOverrideRequest } from "@/src/features/child/hooks/use-override-request";
-import { useChildProfile } from "@/src/features/child/hooks/use-child-profile";
 
 export default function BlockedAppScreen() {
-  const { user } = useAuth();
-  const params = useLocalSearchParams<{ packageName?: string; appName?: string }>();
-  const { data: childProfile } = useChildProfile(user?.id);
+  const params = useLocalSearchParams<{
+    packageName?: string;
+    appName?: string;
+  }>();
+  const { data: childProfile } = useChildProfile();
   const createOverrideRequest = useCreateOverrideRequest();
 
   const [requestSent, setRequestSent] = useState(false);
@@ -49,10 +57,7 @@ export default function BlockedAppScreen() {
         ]
       );
     } catch (error) {
-      Alert.alert(
-        "Error",
-        "Failed to send request. Please try again."
-      );
+      Alert.alert("Error", "Failed to send request. Please try again.");
     }
   };
 
