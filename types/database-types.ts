@@ -354,6 +354,7 @@ export type Database = {
           child_id: string;
           created_at: string;
           icon_path: string | null;
+          icon_url: string | null;
           id: string;
           package_name: string;
         };
@@ -363,6 +364,7 @@ export type Database = {
           child_id: string;
           created_at?: string;
           icon_path?: string | null;
+          icon_url?: string | null;
           id?: string;
           package_name: string;
         };
@@ -372,6 +374,7 @@ export type Database = {
           child_id?: string;
           created_at?: string;
           icon_path?: string | null;
+          icon_url?: string | null;
           id?: string;
           package_name?: string;
         };

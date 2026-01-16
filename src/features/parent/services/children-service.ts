@@ -126,7 +126,9 @@ export async function fetchChildById(childId: string): Promise<ChildRow> {
 export async function fetchChildApps(childId: string): Promise<ChildAppRow[]> {
   const { data, error } = await supabase
     .from("child_apps")
-    .select("id,app_name,category,package_name,icon_path,child_id,created_at")
+    .select(
+      "id,app_name,category,package_name,icon_path,icon_url,child_id,created_at"
+    )
     .eq("child_id", childId)
     .order("app_name", { ascending: true });
 

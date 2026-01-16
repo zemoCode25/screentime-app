@@ -25,6 +25,7 @@ type UsageStatsModuleType = {
   requestAccessibilityPermission: () => void;
   updateBlockedPackages: (packages: string[]) => Promise<void>;
   getBlockedPackages: () => Promise<string[]>;
+  getAppIconBase64: (packageName: string) => Promise<string | null>;
 };
 
 const UsageStatsModule =
@@ -62,9 +63,17 @@ export function requestAccessibilityPermission() {
 }
 
 export function updateBlockedPackages(packages: string[]) {
-  return UsageStatsModule?.updateBlockedPackages?.(packages) ?? Promise.resolve();
+  return (
+    UsageStatsModule?.updateBlockedPackages?.(packages) ?? Promise.resolve()
+  );
 }
 
 export function getBlockedPackages() {
   return UsageStatsModule?.getBlockedPackages?.() ?? Promise.resolve([]);
+}
+
+export function getAppIconBase64(packageName: string) {
+  return (
+    UsageStatsModule?.getAppIconBase64?.(packageName) ?? Promise.resolve(null)
+  );
 }

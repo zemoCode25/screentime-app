@@ -1,14 +1,15 @@
 import { Platform } from "react-native";
 import {
+  getAppIconBase64,
+  getBlockedPackages,
   getInstalledApps,
   getUsageStats,
+  isAccessibilityEnabled,
   isUsageAccessGranted,
   isUsageModuleAvailable,
   openUsageAccessSettings,
-  isAccessibilityEnabled,
   requestAccessibilityPermission,
   updateBlockedPackages,
-  getBlockedPackages,
 } from "screentime-usage";
 
 export type InstalledApp = {
@@ -24,10 +25,7 @@ export type UsageStat = {
   lastTimeUsed: number;
 };
 
-export type UsageAccessStatus =
-  | "granted"
-  | "needs-permission"
-  | "unavailable";
+export type UsageAccessStatus = "granted" | "needs-permission" | "unavailable";
 
 export function canUseUsageStats() {
   return Platform.OS === "android" && isUsageModuleAvailable();
@@ -102,4 +100,13 @@ export async function getBlockedPackagesList(): Promise<string[]> {
     return [];
   }
   return getBlockedPackages();
+}
+
+export async function fetchAppIconBase64(
+  packageName: string
+): Promise<string | null> {
+  if (!canUseUsageStats()) {
+    return null;
+  }
+  return getAppIconBase64(packageName);
 }

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,6 +23,7 @@ import {
   useChildUsageHourly,
 } from "@/src/features/child/hooks/use-child-data";
 import { calculateBlockedPackages } from "@/src/features/child/services/blocking-enforcement";
+import { type AppLimitRow } from "@/src/features/child/services/child-service";
 import { syncChildDeviceUsage } from "@/src/features/child/services/device-usage-sync";
 import { fetchActiveOverrides } from "@/src/features/child/services/override-service";
 import { canUseUsageStats, setBlockedPackages } from "@/src/lib/usage-stats";
@@ -100,11 +102,10 @@ const describePieSlice = (
   ].join(" ");
 };
 
-type AppLimitRow = Database["public"]["Tables"]["app_limits"]["Row"];
 type ChildAppRow = Database["public"]["Tables"]["child_apps"]["Row"];
 type AppBase = Pick<
   ChildAppRow,
-  "id" | "app_name" | "category" | "package_name" | "icon_path"
+  "id" | "app_name" | "category" | "package_name" | "icon_path" | "icon_url"
 >;
 
 type AppCard = {
@@ -112,6 +113,7 @@ type AppCard = {
   name: string;
   packageName: string;
   category: AppCategory;
+  iconUrl: string | null;
   totalSeconds: number;
   avgDailySeconds: number;
   openCount: number;
@@ -339,10 +341,6 @@ export default function ChildHomeScreen() {
   const error =
     childError ?? appsError ?? usageError ?? usageHourlyError ?? limitsError;
 
-  if (isLoading) {
-    return <ChildDashboardSkeleton />;
-  }
-
   const {
     appCards,
     totalSecondsRange,
@@ -378,9 +376,10 @@ export default function ChildHomeScreen() {
         : Array.from(usageByPackage.keys()).map((packageName) => ({
             id: packageName,
             app_name: packageName,
-            category: "other",
+            category: "other" as const,
             package_name: packageName,
             icon_path: null,
+            icon_url: null,
           }));
 
     const usageValues = baseApps.map((app) => {
@@ -441,6 +440,7 @@ export default function ChildHomeScreen() {
           name: app.app_name,
           packageName: app.package_name,
           category: resolveAppCategory(app.category, app.package_name),
+          iconUrl: app.icon_url ?? null,
           totalSeconds: usage.totalSeconds,
           avgDailySeconds,
           openCount: usage.openCount,
@@ -682,6 +682,10 @@ export default function ChildHomeScreen() {
         return slice;
       });
   }, [selectedUsageDetails]);
+
+  if (isLoading) {
+    return <ChildDashboardSkeleton />;
+  }
 
   const handleSignOut = () => {
     void signOut();
@@ -1250,7 +1254,18 @@ export default function ChildHomeScreen() {
                       <Text style={styles.rankText}>#{index + 1}</Text>
                     </View>
                     <View style={styles.appIcon}>
-                      <Ionicons name="apps" size={18} color={COLORS.primary} />
+                      {app.iconUrl ? (
+                        <Image
+                          source={{ uri: app.iconUrl }}
+                          style={styles.appIconImage}
+                        />
+                      ) : (
+                        <Ionicons
+                          name="apps"
+                          size={18}
+                          color={COLORS.primary}
+                        />
+                      )}
                     </View>
                     <View style={styles.appMeta}>
                       <Text style={styles.appName}>{app.name}</Text>
@@ -1881,6 +1896,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#EFF6FF",
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  appIconImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
   },
   appMeta: {
     flex: 1,
