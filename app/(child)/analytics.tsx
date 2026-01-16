@@ -114,20 +114,33 @@ const formatHourRange = (startHour: number) => {
 };
 
 export default function ChildAnalyticsScreen() {
-  const { data: child, isLoading: childLoading, error: childError } =
-    useChildProfile();
+  const {
+    data: child,
+    isLoading: childLoading,
+    error: childError,
+  } = useChildProfile();
   const childId = child?.id;
   const startDate = getDateDaysAgo(30);
   const hourlyStartDate = getDateDaysAgo(7);
 
-  const { data: apps, isLoading: appsLoading, error: appsError } =
-    useChildApps(childId);
-  const { data: usageRows, isLoading: usageLoading, error: usageError } =
-    useChildUsageDaily(childId, startDate);
-  const { data: hourlyRows, isLoading: hourlyLoading, error: hourlyError } =
-    useChildUsageHourly(childId, hourlyStartDate);
+  const {
+    data: apps,
+    isLoading: appsLoading,
+    error: appsError,
+  } = useChildApps(childId);
+  const {
+    data: usageRows,
+    isLoading: usageLoading,
+    error: usageError,
+  } = useChildUsageDaily(childId, startDate);
+  const {
+    data: hourlyRows,
+    isLoading: hourlyLoading,
+    error: hourlyError,
+  } = useChildUsageHourly(childId, hourlyStartDate);
 
-  const isLoading = childLoading || appsLoading || usageLoading || hourlyLoading;
+  const isLoading =
+    childLoading || appsLoading || usageLoading || hourlyLoading;
   const error = childError ?? appsError ?? usageError ?? hourlyError;
 
   const {
@@ -402,35 +415,39 @@ export default function ChildAnalyticsScreen() {
         ) : null}
 
         <View style={styles.kpiGrid}>
-          <View style={styles.kpiCard}>
-            <Text style={styles.kpiLabel}>Avg Daily</Text>
-            <Text style={styles.kpiValue}>
-              {formatDuration(avgDailySeconds)}
-            </Text>
-            <View style={styles.kpiTrendRow}>
-              <Ionicons
-                name={trendIsPositive ? "arrow-up" : "arrow-down"}
-                size={14}
-                color={trendIsPositive ? COLORS.success : COLORS.warning}
-              />
-              <Text
-                style={[
-                  styles.kpiTrend,
-                  trendIsPositive ? styles.trendPositive : styles.trendNegative,
-                ]}
-              >
-                {trendLabel}
+          <View style={styles.kpiRow}>
+            <View style={styles.kpiCard}>
+              <Text style={styles.kpiLabel}>Avg Daily</Text>
+              <Text style={styles.kpiValue}>
+                {formatDuration(avgDailySeconds)}
               </Text>
-              <Text style={styles.kpiTrendSub}>vs last week</Text>
+              <View style={styles.kpiTrendRow}>
+                <Ionicons
+                  name={trendIsPositive ? "arrow-up" : "arrow-down"}
+                  size={14}
+                  color={trendIsPositive ? COLORS.success : COLORS.warning}
+                />
+                <Text
+                  style={[
+                    styles.kpiTrend,
+                    trendIsPositive
+                      ? styles.trendPositive
+                      : styles.trendNegative,
+                  ]}
+                >
+                  {trendLabel}
+                </Text>
+                <Text style={styles.kpiTrendSub}>vs last week</Text>
+              </View>
             </View>
-          </View>
 
-          <View style={styles.kpiCard}>
-            <Text style={styles.kpiLabel}>Most Used</Text>
-            <Text style={styles.kpiValue}>{mostUsedLabel}</Text>
-            <Text style={styles.kpiSub}>
-              {formatDuration(mostUsedSeconds)} total
-            </Text>
+            <View style={styles.kpiCard}>
+              <Text style={styles.kpiLabel}>Most Used</Text>
+              <Text style={styles.kpiValue}>{mostUsedLabel}</Text>
+              <Text style={styles.kpiSub}>
+                {formatDuration(mostUsedSeconds)} total
+              </Text>
+            </View>
           </View>
 
           <View style={styles.kpiCard}>
@@ -450,12 +467,7 @@ export default function ChildAnalyticsScreen() {
             <View style={styles.pieChart}>
               {categorySlices.length === 0 ? (
                 <View style={styles.pieEmpty}>
-                  <Ionicons
-                    name="pie-chart"
-                    size={28}
-                    color={COLORS.textSecondary}
-                  />
-                  <Text style={styles.pieEmptyText}>No data yet</Text>
+                  <Text style={styles.pieEmptyText}>No usage data</Text>
                 </View>
               ) : (
                 categorySlices.map((slice) => (
@@ -477,10 +489,7 @@ export default function ChildAnalyticsScreen() {
               {categorySlices.map((slice) => (
                 <View key={slice.key} style={styles.legendRow}>
                   <View
-                    style={[
-                      styles.legendDot,
-                      { backgroundColor: slice.color },
-                    ]}
+                    style={[styles.legendDot, { backgroundColor: slice.color }]}
                   />
                   <View style={styles.legendTextGroup}>
                     <Text style={styles.legendLabel}>{slice.label}</Text>
@@ -509,9 +518,7 @@ export default function ChildAnalyticsScreen() {
                     ]}
                   />
                 </View>
-                <Text style={styles.barValue}>
-                  {formatDuration(bar.value)}
-                </Text>
+                <Text style={styles.barValue}>{formatDuration(bar.value)}</Text>
                 <Text style={styles.barLabel}>{bar.label}</Text>
               </View>
             ))}
@@ -558,8 +565,7 @@ export default function ChildAnalyticsScreen() {
                 ))}
               </View>
               <Text style={styles.chartNote}>
-                Peak window: {hourPeakLabel} (
-                {formatDuration(hourPeakSeconds)})
+                Peak window: {hourPeakLabel} ({formatDuration(hourPeakSeconds)})
               </Text>
             </>
           )}
@@ -590,9 +596,7 @@ export default function ChildAnalyticsScreen() {
                         style={[
                           styles.dayFill,
                           { height: `${(bar.value / dayMax) * 100}%` },
-                          bar.date === dayPeakDate
-                            ? styles.dayFillPeak
-                            : null,
+                          bar.date === dayPeakDate ? styles.dayFillPeak : null,
                         ]}
                       />
                     </View>
@@ -704,15 +708,22 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
   },
   kpiGrid: {
-    gap: 16,
+    gap: 12,
+  },
+  kpiRow: {
+    flexDirection: "row",
+    gap: 12,
   },
   kpiCard: {
+    flex: 1,
     backgroundColor: COLORS.surface,
     borderRadius: 20,
-    padding: 16,
+    padding: 12,
+    paddingVertical: 16,
     borderWidth: 1,
     borderColor: COLORS.border,
-    gap: 8,
+    alignItems: "center",
+    gap: 4,
   },
   kpiLabel: {
     fontSize: 12,
@@ -773,39 +784,33 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
   },
   chartRow: {
-    flexDirection: "row",
-    gap: 20,
-    alignItems: "center",
-    flexWrap: "wrap",
+    gap: 16,
   },
   pieChart: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    overflow: "hidden",
     flexDirection: "row",
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: "#F8FAFC",
-    justifyContent: "center",
-    alignItems: "center",
+    height: 32,
+    borderRadius: 12,
+    overflow: "hidden",
+    width: "100%",
+    backgroundColor: "#F1F5F9",
+    borderWidth: 0,
   },
   pieSlice: {
     height: "100%",
-    flexBasis: 0,
   },
   pieEmpty: {
+    flex: 1,
     alignItems: "center",
-    gap: 6,
+    justifyContent: "center",
   },
   pieEmptyText: {
     fontSize: 12,
     color: COLORS.textSecondary,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "Inter_500Medium",
   },
   legend: {
-    flex: 1,
     gap: 12,
+    marginTop: 8,
   },
   legendRow: {
     flexDirection: "row",
@@ -813,9 +818,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   legendTextGroup: {
     flexDirection: "row",
@@ -824,19 +829,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   legendLabel: {
-    fontSize: 12,
+    fontSize: 13,
     color: COLORS.text,
     fontFamily: "Inter_500Medium",
   },
   legendValue: {
-    fontSize: 12,
+    fontSize: 13,
     color: COLORS.textSecondary,
     fontFamily: "Inter_400Regular",
   },
   barChart: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 16,
+    gap: 12,
   },
   barItem: {
     flex: 1,
@@ -844,63 +849,66 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   barTrack: {
-    height: 120,
-    width: 30,
+    height: 140,
+    width: 48,
     backgroundColor: "#F1F5F9",
-    borderRadius: 16,
+    borderRadius: 12,
     justifyContent: "flex-end",
     overflow: "hidden",
   },
   barFill: {
     width: "100%",
     backgroundColor: COLORS.primary,
-    borderRadius: 16,
+    borderRadius: 12,
   },
   barValue: {
-    fontSize: 12,
+    fontSize: 13,
     color: COLORS.text,
     fontFamily: "Inter_600SemiBold",
   },
   barLabel: {
     fontSize: 12,
     color: COLORS.textSecondary,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "Inter_500Medium",
   },
   chartEmpty: {
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    paddingVertical: 12,
+    gap: 12,
+    paddingVertical: 32,
   },
   chartEmptyText: {
-    fontSize: 12,
+    fontSize: 14,
     color: COLORS.textSecondary,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "Inter_500Medium",
   },
   chartNote: {
-    fontSize: 12,
+    fontSize: 13,
     color: COLORS.textSecondary,
     fontFamily: "Inter_400Regular",
+    marginTop: 4,
   },
   hourChart: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-end",
-    height: 120,
-    gap: 6,
+    height: 140,
+    gap: 4,
   },
   hourBarTrack: {
     flex: 1,
-    maxWidth: 14,
     height: "100%",
     justifyContent: "flex-end",
-    backgroundColor: "#F1F5F9",
-    borderRadius: 8,
+    backgroundColor: "transparent",
+    borderRadius: 4,
     overflow: "hidden",
   },
   hourBarFill: {
     width: "100%",
     backgroundColor: COLORS.primaryLight,
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4,
+    minHeight: 4,
   },
   hourBarPeak: {
     backgroundColor: COLORS.primary,
@@ -908,31 +916,32 @@ const styles = StyleSheet.create({
   hourLabels: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 6,
+    gap: 4,
+    marginTop: 8,
   },
   hourLabel: {
     flex: 1,
-    maxWidth: 14,
     textAlign: "center",
     fontSize: 10,
     color: COLORS.textSecondary,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "Inter_500Medium",
   },
   dayChart: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-end",
-    gap: 12,
+    gap: 8,
+    height: 160,
   },
   dayItem: {
     alignItems: "center",
-    gap: 6,
+    gap: 8,
     flex: 1,
   },
   dayTrack: {
-    height: 110,
-    width: 26,
-    backgroundColor: "#F1F5F9",
+    flex: 1,
+    width: "100%",
+    backgroundColor: "#F8FAFC",
     borderRadius: 12,
     justifyContent: "flex-end",
     overflow: "hidden",
@@ -941,6 +950,7 @@ const styles = StyleSheet.create({
     width: "100%",
     backgroundColor: COLORS.primaryLight,
     borderRadius: 12,
+    minHeight: 6,
   },
   dayFillPeak: {
     backgroundColor: COLORS.primary,
@@ -948,6 +958,6 @@ const styles = StyleSheet.create({
   dayLabel: {
     fontSize: 12,
     color: COLORS.textSecondary,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "Inter_500Medium",
   },
 });

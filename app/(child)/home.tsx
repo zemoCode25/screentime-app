@@ -21,7 +21,6 @@ import {
   useChildUsageHourly,
 } from "@/src/features/child/hooks/use-child-data";
 import { syncChildDeviceUsage } from "@/src/features/child/services/device-usage-sync";
-import { seedChildMockUsage } from "@/src/features/child/services/child-service";
 import {
   APP_CATEGORY_ORDER,
   getAppCategoryLabel,
@@ -204,8 +203,6 @@ export default function ChildHomeScreen() {
     AppCategory | "all"
   >("all");
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
-  const [isSeeding, setIsSeeding] = useState(false);
-  const [seedError, setSeedError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -593,24 +590,6 @@ export default function ChildHomeScreen() {
     void signOut();
   };
 
-  const handleMockSync = async () => {
-    if (!childId || isSeeding) {
-      return;
-    }
-    setSeedError(null);
-    setIsSeeding(true);
-    try {
-      await seedChildMockUsage(childId);
-      await queryClient.invalidateQueries({ queryKey: ["child"] });
-    } catch (err) {
-      setSeedError(
-        err instanceof Error ? err.message : "Failed to seed mock data."
-      );
-    } finally {
-      setIsSeeding(false);
-    }
-  };
-
   const handleDeviceSync = async () => {
     if (!childId || isSyncing) {
       return;
@@ -739,37 +718,6 @@ export default function ChildHomeScreen() {
           ) : null}
           {syncError ? <Text style={styles.syncError}>{syncError}</Text> : null}
         </View>
-
-        {__DEV__ ? (
-          <View style={styles.mockCard}>
-            <View style={styles.mockRow}>
-              <View>
-                <Text style={styles.mockTitle}>Mock sync</Text>
-                <Text style={styles.mockText}>
-                  Seed sample apps and usage for this child account.
-                </Text>
-              </View>
-              <Pressable
-                onPress={handleMockSync}
-                disabled={isSeeding || !childId}
-                style={({ pressed }) => [
-                  styles.mockButton,
-                  (isSeeding || !childId) && styles.mockButtonDisabled,
-                  pressed && styles.mockButtonPressed,
-                ]}
-              >
-                {isSeeding ? (
-                  <ActivityIndicator color={COLORS.surface} size="small" />
-                ) : (
-                  <Text style={styles.mockButtonText}>Seed data</Text>
-                )}
-              </Pressable>
-            </View>
-            {seedError ? (
-              <Text style={styles.mockError}>{seedError}</Text>
-            ) : null}
-          </View>
-        ) : null}
 
         <View style={styles.rangeRow}>
           {rangeKeys.map((rangeKey) => {
@@ -1283,57 +1231,6 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
   },
   syncError: {
-    fontSize: 12,
-    color: COLORS.error,
-    fontFamily: "Inter_500Medium",
-  },
-  mockCard: {
-    padding: 16,
-    borderRadius: 18,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    gap: 12,
-  },
-  mockRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  mockTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: COLORS.text,
-    fontFamily: "Inter_700Bold",
-  },
-  mockText: {
-    marginTop: 4,
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    fontFamily: "Inter_400Regular",
-    maxWidth: 220,
-  },
-  mockButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 999,
-    backgroundColor: COLORS.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  mockButtonDisabled: {
-    backgroundColor: "#94A3B8",
-  },
-  mockButtonPressed: {
-    opacity: 0.9,
-  },
-  mockButtonText: {
-    fontSize: 12,
-    color: COLORS.surface,
-    fontFamily: "Inter_600SemiBold",
-  },
-  mockError: {
     fontSize: 12,
     color: COLORS.error,
     fontFamily: "Inter_500Medium",
