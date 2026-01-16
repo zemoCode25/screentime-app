@@ -21,6 +21,7 @@ import {
   useChildUsageHourly,
 } from "@/src/features/child/hooks/use-child-data";
 import { syncChildDeviceUsage } from "@/src/features/child/services/device-usage-sync";
+import { canUseUsageStats } from "@/src/lib/usage-stats";
 import {
   APP_CATEGORY_ORDER,
   getAppCategoryLabel,
@@ -28,7 +29,6 @@ import {
   type AppCategory,
 } from "@/src/utils/app-category";
 import { formatDuration } from "@/src/utils/time";
-import { canUseUsageStats } from "@/src/lib/usage-stats";
 import type { Database } from "@/types/database-types";
 
 const COLORS = {
@@ -199,16 +199,19 @@ export default function ChildHomeScreen() {
   const { profile, signOut } = useAuth();
   const queryClient = useQueryClient();
   const [timeRange, setTimeRange] = useState<TimeRangeKey>("today");
-  const [selectedCategory, setSelectedCategory] = useState<
-    AppCategory | "all"
-  >("all");
+  const [selectedCategory, setSelectedCategory] = useState<AppCategory | "all">(
+    "all"
+  );
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [visibleAppCount, setVisibleAppCount] = useState(15);
-  const { data: child, isLoading: childLoading, error: childError } =
-    useChildProfile();
+  const {
+    data: child,
+    isLoading: childLoading,
+    error: childError,
+  } = useChildProfile();
   const childId = child?.id;
   const today = useMemo(() => new Date(), []);
   const rangeConfig = TIME_RANGE_OPTIONS[timeRange];
@@ -216,18 +219,27 @@ export default function ChildHomeScreen() {
   const startDate = getDateDaysAgo(rangeDays - 1);
   const isTodayRange = timeRange === "today";
 
-  const { data: apps, isLoading: appsLoading, error: appsError } =
-    useChildApps(childId);
-  const { data: usageRows, isLoading: usageLoading, error: usageError } =
-    useChildUsageDaily(childId, startDate);
+  const {
+    data: apps,
+    isLoading: appsLoading,
+    error: appsError,
+  } = useChildApps(childId);
+  const {
+    data: usageRows,
+    isLoading: usageLoading,
+    error: usageError,
+  } = useChildUsageDaily(childId, startDate);
 
   const {
     data: usageHourlyRows,
     isLoading: usageHourlyLoading,
     error: usageHourlyError,
   } = useChildUsageHourly(childId, startDate);
-  const { data: limits, isLoading: limitsLoading, error: limitsError } =
-    useChildLimits(childId);
+  const {
+    data: limits,
+    isLoading: limitsLoading,
+    error: limitsError,
+  } = useChildLimits(childId);
 
   const isLoading =
     childLoading ||
@@ -236,11 +248,7 @@ export default function ChildHomeScreen() {
     usageHourlyLoading ||
     limitsLoading;
   const error =
-    childError ??
-    appsError ??
-    usageError ??
-    usageHourlyError ??
-    limitsError;
+    childError ?? appsError ?? usageError ?? usageHourlyError ?? limitsError;
 
   const {
     appCards,
@@ -564,7 +572,13 @@ export default function ChildHomeScreen() {
         const angle =
           (segment.value / selectedUsageDetails.totalHourlySeconds) * 360;
         const endAngle = startAngle + angle;
-        const path = describePieSlice(center, center, radius, startAngle, endAngle);
+        const path = describePieSlice(
+          center,
+          center,
+          radius,
+          startAngle,
+          endAngle
+        );
         const slice = {
           label: segment.label,
           value: segment.value,
@@ -596,9 +610,7 @@ export default function ChildHomeScreen() {
         return;
       }
       if (result.accessStatus === "needs-permission") {
-        setSyncError(
-          "Enable Usage Access in Settings, then tap Sync again."
-        );
+        setSyncError("Enable Usage Access in Settings, then tap Sync again.");
         return;
       }
       setSyncMessage(
@@ -639,11 +651,9 @@ export default function ChildHomeScreen() {
     : `Top app in ${rangeConfig.rangeLabel}`;
   const appsSectionTitle = "Apps on your device";
   const rangeKeys: TimeRangeKey[] = ["today", "week", "month"];
-  const showNoApps =
-    !hasAppCatalog && appCards.length === 0 && !isLoading;
+  const showNoApps = !hasAppCatalog && appCards.length === 0 && !isLoading;
   const canSyncDevice = Boolean(childId) && canUseUsageStats();
-  const hasHourlyData =
-    (selectedUsageDetails?.totalHourlySeconds ?? 0) > 0;
+  const hasHourlyData = (selectedUsageDetails?.totalHourlySeconds ?? 0) > 0;
   const barLabelStep = selectedUsageDetails
     ? Math.max(1, Math.ceil(selectedUsageDetails.rangeSeries.length / 6))
     : 1;
@@ -680,7 +690,7 @@ export default function ChildHomeScreen() {
 
         <View style={styles.syncCard}>
           <View style={styles.syncRow}>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.syncTitle}>Device sync</Text>
               <Text style={styles.syncText}>
                 Pull installed apps and screen time from this device.
@@ -766,9 +776,7 @@ export default function ChildHomeScreen() {
 
           <View style={styles.heroStats}>
             <View style={styles.heroStat}>
-              <View
-                style={[styles.statIcon, { backgroundColor: "#EFF6FF" }]}
-              >
+              <View style={[styles.statIcon, { backgroundColor: "#EFF6FF" }]}>
                 <Ionicons name="time" size={20} color={COLORS.primary} />
               </View>
               <Text style={styles.heroValue}>
@@ -778,9 +786,7 @@ export default function ChildHomeScreen() {
             </View>
             <View style={styles.divider} />
             <View style={styles.heroStat}>
-              <View
-                style={[styles.statIcon, { backgroundColor: "#FFF7ED" }]}
-              >
+              <View style={[styles.statIcon, { backgroundColor: "#FFF7ED" }]}>
                 <Ionicons name="hourglass" size={20} color={COLORS.warning} />
               </View>
               <Text style={styles.heroValue}>{secondaryValue}</Text>
@@ -899,16 +905,9 @@ export default function ChildHomeScreen() {
                 </View>
                 <View style={styles.kpiCard}>
                   <View
-                    style={[
-                      styles.kpiIconBox,
-                      { backgroundColor: "#FEF3C7" },
-                    ]}
+                    style={[styles.kpiIconBox, { backgroundColor: "#FEF3C7" }]}
                   >
-                    <Ionicons
-                      name="time-outline"
-                      size={16}
-                      color="#D97706"
-                    />
+                    <Ionicons name="time-outline" size={16} color="#D97706" />
                   </View>
                   <Text style={styles.kpiLabel}>Most active</Text>
                   <Text style={styles.kpiValue}>
@@ -940,10 +939,7 @@ export default function ChildHomeScreen() {
                       </Svg>
                       <View style={styles.legend}>
                         {selectedUsageDetails.segments.map((segment) => (
-                          <View
-                            key={segment.label}
-                            style={styles.legendRow}
-                          >
+                          <View key={segment.label} style={styles.legendRow}>
                             <View
                               style={[
                                 styles.legendSwatch,
@@ -963,9 +959,7 @@ export default function ChildHomeScreen() {
                       </View>
                     </View>
                   ) : (
-                    <Text style={styles.chartEmpty}>
-                      No hourly usage yet.
-                    </Text>
+                    <Text style={styles.chartEmpty}>No hourly usage yet.</Text>
                   )}
                 </View>
 
@@ -984,15 +978,17 @@ export default function ChildHomeScreen() {
                             );
                       const showLabel =
                         index % barLabelStep === 0 ||
-                        index ===
-                          selectedUsageDetails.rangeSeries.length - 1;
+                        index === selectedUsageDetails.rangeSeries.length - 1;
                       return (
                         <View key={entry.dateKey} style={styles.barColumn}>
                           <View style={styles.barTrack}>
                             <View
                               style={[
                                 styles.barFill,
-                                { height, opacity: entry.seconds > 0 ? 1 : 0.4 },
+                                {
+                                  height,
+                                  opacity: entry.seconds > 0 ? 1 : 0.4,
+                                },
                               ]}
                             />
                           </View>
@@ -1023,7 +1019,9 @@ export default function ChildHomeScreen() {
             </View>
           ) : null}
 
-          {appCards.length > 0 && filteredAppCards.length === 0 && !isLoading ? (
+          {appCards.length > 0 &&
+          filteredAppCards.length === 0 &&
+          !isLoading ? (
             <View style={styles.emptyCard}>
               <Ionicons name="filter" size={24} color={COLORS.primary} />
               <Text style={styles.emptyTitle}>No apps in this category</Text>
@@ -1035,15 +1033,14 @@ export default function ChildHomeScreen() {
 
           <View style={styles.appList}>
             {visibleAppCards.map((app, index) => {
-              const rawPercent = Math.min(
-                Math.round(app.progress * 100),
-                100
-              );
+              const rawPercent = Math.min(Math.round(app.progress * 100), 100);
               const progressPercent =
                 app.totalSeconds > 0 ? Math.max(rawPercent, 2) : 0;
               const usageLabel = isTodayRange
                 ? `${formatDuration(app.totalSeconds)} today`
-                : `${formatDuration(app.totalSeconds)} in ${rangeConfig.rangeLabel}`;
+                : `${formatDuration(app.totalSeconds)} in ${
+                    rangeConfig.rangeLabel
+                  }`;
               const detailLine = `${usageLabel} | ${getAppCategoryLabel(
                 app.category
               )}`;
@@ -1115,8 +1112,8 @@ export default function ChildHomeScreen() {
                           styles.progressBarFill,
                           { width: `${progressPercent}%` },
                           app.limitSeconds !== null &&
-                            isTodayRange &&
-                            app.totalSeconds > (app.limitSeconds ?? 0)
+                          isTodayRange &&
+                          app.totalSeconds > (app.limitSeconds ?? 0)
                             ? styles.progressOver
                             : null,
                         ]}
@@ -1138,12 +1135,17 @@ export default function ChildHomeScreen() {
             >
               <Ionicons name="chevron-down" size={20} color={COLORS.primary} />
               <Text style={styles.loadMoreText}>
-                Load more ({filteredAppCards.length - visibleAppCount} remaining)
+                Load more ({filteredAppCards.length - visibleAppCount}{" "}
+                remaining)
               </Text>
             </Pressable>
           ) : filteredAppCards.length > 15 ? (
             <View style={styles.allLoadedCard}>
-              <Ionicons name="checkmark-circle" size={20} color={COLORS.success} />
+              <Ionicons
+                name="checkmark-circle"
+                size={20}
+                color={COLORS.success}
+              />
               <Text style={styles.allLoadedText}>
                 All {filteredAppCards.length} apps loaded
               </Text>
