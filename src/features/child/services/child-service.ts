@@ -62,7 +62,12 @@ const MOCK_APPS: MockAppSeed[] = [
   },
 ];
 
-const getIsoDate = (date: Date) => date.toISOString().slice(0, 10);
+const getIsoDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
 const CHILD_SELECT_FIELDS =
   "id,name,age,grade_level,interests,motivations,child_user_id,child_email,parent_user_id";
@@ -234,7 +239,7 @@ export async function seedChildMockUsage(childId: string) {
   const { error: usageError } = await supabase
     .from("app_usage_daily")
     .upsert(usagePayload, {
-      onConflict: "child_id,package_name,usage_date,device_id",
+      onConflict: "child_id,package_name,usage_date",
     });
 
   if (usageError) {

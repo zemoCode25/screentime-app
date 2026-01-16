@@ -86,7 +86,12 @@ const HOUR_LABELS = [
 ];
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-const getIsoDate = (date: Date) => date.toISOString().slice(0, 10);
+const getIsoDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
 const getDateDaysAgo = (days: number) => {
   const date = new Date();
@@ -292,9 +297,16 @@ export default function ChildAnalyticsScreen() {
       (a, b) => b[1] - a[1]
     );
 
-    const topCategories = sortedCategoryTotals.slice(0, 4);
+    // Separate "other" from regular categories
+    const nonOtherCategories = sortedCategoryTotals.filter(
+      ([key]) => key !== "other"
+    );
+    const otherCategoryTotal = categoryTotals.get("other") ?? 0;
+
+    const topCategories = nonOtherCategories.slice(0, 4);
     const topTotal = topCategories.reduce((sum, entry) => sum + entry[1], 0);
-    const otherTotal = Math.max(total - topTotal, 0);
+    const remainingTotal = Math.max(total - topTotal - otherCategoryTotal, 0);
+    const combinedOtherTotal = otherCategoryTotal + remainingTotal;
 
     const slices: CategorySlice[] = topCategories.map(([key, value]) => ({
       key,
@@ -304,13 +316,13 @@ export default function ChildAnalyticsScreen() {
       percent: total > 0 ? Math.round((value / total) * 100) : 0,
     }));
 
-    if (otherTotal > 0) {
+    if (combinedOtherTotal > 0) {
       slices.push({
         key: "other",
         label: getAppCategoryLabel("other"),
         color: CATEGORY_COLORS.other,
-        value: otherTotal,
-        percent: total > 0 ? Math.round((otherTotal / total) * 100) : 0,
+        value: combinedOtherTotal,
+        percent: total > 0 ? Math.round((combinedOtherTotal / total) * 100) : 0,
       });
     }
 

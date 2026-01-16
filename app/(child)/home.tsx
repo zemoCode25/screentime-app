@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
 
 import { useAuth } from "@/src/features/auth/hooks/use-auth";
 import {
@@ -17,6 +18,7 @@ import {
   useChildLimits,
   useChildProfile,
   useChildUsageDaily,
+  useChildUsageHourly,
 } from "@/src/features/child/hooks/use-child-data";
 import { syncChildDeviceUsage } from "@/src/features/child/services/device-usage-sync";
 import { seedChildMockUsage } from "@/src/features/child/services/child-service";
@@ -44,6 +46,58 @@ const COLORS = {
   error: "#EF4444",
 };
 
+const CHART_COLORS = {
+  night: "#1E3A8A",
+  morning: "#38BDF8",
+  afternoon: "#F59E0B",
+  evening: "#FB7185",
+};
+
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+const formatHourLabel = (hour: number) => {
+  const hour12 = ((hour + 11) % 12) + 1;
+  const period = hour >= 12 ? "PM" : "AM";
+  return `${hour12} ${period}`;
+};
+
+const formatHourRangeLabel = (hour: number) => {
+  const nextHour = (hour + 1) % 24;
+  return `${formatHourLabel(hour)}-${formatHourLabel(nextHour)}`;
+};
+
+const polarToCartesian = (
+  centerX: number,
+  centerY: number,
+  radius: number,
+  angleInDegrees: number
+) => {
+  const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180.0;
+  return {
+    x: centerX + radius * Math.cos(angleInRadians),
+    y: centerY + radius * Math.sin(angleInRadians),
+  };
+};
+
+const describePieSlice = (
+  centerX: number,
+  centerY: number,
+  radius: number,
+  startAngle: number,
+  endAngle: number
+) => {
+  const start = polarToCartesian(centerX, centerY, radius, endAngle);
+  const end = polarToCartesian(centerX, centerY, radius, startAngle);
+  const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+
+  return [
+    `M ${centerX} ${centerY}`,
+    `L ${start.x} ${start.y}`,
+    `A ${radius} ${radius} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`,
+    "Z",
+  ].join(" ");
+};
+
 type AppLimitRow = Database["public"]["Tables"]["app_limits"]["Row"];
 type ChildAppRow = Database["public"]["Tables"]["child_apps"]["Row"];
 type AppBase = Pick<
@@ -62,9 +116,15 @@ type AppCard = {
   limitSeconds: number | null;
   remainingSeconds: number | null;
   progress: number;
+  sortValue: number;
 };
 
-const getIsoDate = (date: Date) => date.toISOString().slice(0, 10);
+const getIsoDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 const getDateDaysAgo = (days: number) => {
   const date = new Date();
   date.setDate(date.getDate() - days);
@@ -143,6 +203,7 @@ export default function ChildHomeScreen() {
   const [selectedCategory, setSelectedCategory] = useState<
     AppCategory | "all"
   >("all");
+  const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [isSeeding, setIsSeeding] = useState(false);
   const [seedError, setSeedError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -161,12 +222,49 @@ export default function ChildHomeScreen() {
     useChildApps(childId);
   const { data: usageRows, isLoading: usageLoading, error: usageError } =
     useChildUsageDaily(childId, startDate);
+
+  // Debug logging
+  useEffect(() => {
+    console.log('[DEBUG] Apps count:', apps?.length ?? 0);
+    console.log('[DEBUG] Usage rows count:', usageRows?.length ?? 0);
+    console.log('[DEBUG] Time range:', timeRange, 'Days:', rangeDays, 'Start date:', startDate);
+
+    if (usageRows && usageRows.length > 0) {
+      console.log('[DEBUG] Sample usage rows:');
+      usageRows.slice(0, 3).forEach((row, i) => {
+        console.log(`  [${i}] ${row.package_name}: ${row.total_seconds}s on ${row.usage_date}`);
+      });
+    } else {
+      console.log('[DEBUG] No usage rows fetched. childId:', childId);
+    }
+
+    if (apps && apps.length > 0) {
+      console.log('[DEBUG] Sample apps:');
+      apps.slice(0, 3).forEach((app, i) => {
+        console.log(`  [${i}] ${app.app_name} (${app.package_name})`);
+      });
+    }
+  }, [apps, usageRows, childId, startDate, timeRange, rangeDays]);
+  const {
+    data: usageHourlyRows,
+    isLoading: usageHourlyLoading,
+    error: usageHourlyError,
+  } = useChildUsageHourly(childId, startDate);
   const { data: limits, isLoading: limitsLoading, error: limitsError } =
     useChildLimits(childId);
 
   const isLoading =
-    childLoading || appsLoading || usageLoading || limitsLoading;
-  const error = childError ?? appsError ?? usageError ?? limitsError;
+    childLoading ||
+    appsLoading ||
+    usageLoading ||
+    usageHourlyLoading ||
+    limitsLoading;
+  const error =
+    childError ??
+    appsError ??
+    usageError ??
+    usageHourlyError ??
+    limitsError;
 
   const {
     appCards,
@@ -272,6 +370,7 @@ export default function ChildHomeScreen() {
           limitSeconds,
           remainingSeconds,
           progress,
+          sortValue: usageForProgress,
         };
       })
       .filter((card) => {
@@ -281,13 +380,13 @@ export default function ChildHomeScreen() {
         return card.totalSeconds > 0 || card.limitSeconds !== null;
       })
       .sort((a, b) => {
-        const aActive = a.totalSeconds > 0;
-        const bActive = b.totalSeconds > 0;
+        const aActive = a.sortValue > 0;
+        const bActive = b.sortValue > 0;
         if (aActive !== bActive) {
           return aActive ? -1 : 1;
         }
-        if (b.totalSeconds !== a.totalSeconds) {
-          return b.totalSeconds - a.totalSeconds;
+        if (b.sortValue !== a.sortValue) {
+          return b.sortValue - a.sortValue;
         }
         return a.name.localeCompare(b.name);
       });
@@ -312,12 +411,183 @@ export default function ChildHomeScreen() {
     return APP_CATEGORY_ORDER.filter((category) => categorySet.has(category));
   }, [appCards]);
 
-  const filteredAppCards =
-    selectedCategory === "all"
-      ? appCards
-      : appCards.filter((card) => card.category === selectedCategory);
+  const filteredAppCards = useMemo(
+    () =>
+      selectedCategory === "all"
+        ? appCards
+        : appCards.filter((card) => card.category === selectedCategory),
+    [appCards, selectedCategory]
+  );
 
   const greetingName = child?.name ?? profile?.display_name ?? "there";
+
+  const selectableApps =
+    selectedCategory === "all" ? appCards : filteredAppCards;
+
+  useEffect(() => {
+    if (selectableApps.length === 0) {
+      if (selectedAppId !== null) {
+        setSelectedAppId(null);
+      }
+      return;
+    }
+
+    if (
+      !selectedAppId ||
+      !selectableApps.some((card) => card.id === selectedAppId)
+    ) {
+      setSelectedAppId(selectableApps[0].id);
+    }
+  }, [selectableApps, selectedAppId]);
+
+  const selectedApp = useMemo(() => {
+    if (selectableApps.length === 0) {
+      return null;
+    }
+    if (!selectedAppId) {
+      return selectableApps[0];
+    }
+    return (
+      selectableApps.find((card) => card.id === selectedAppId) ??
+      selectableApps[0]
+    );
+  }, [selectableApps, selectedAppId]);
+
+  const selectedUsageDetails = useMemo(() => {
+    if (!selectedApp) {
+      return null;
+    }
+
+    const usageByDate = new Map<string, number>();
+    for (const row of usageRows ?? []) {
+      if (row.package_name !== selectedApp.packageName) {
+        continue;
+      }
+      const totalSeconds = row.total_seconds ?? 0;
+      if (totalSeconds <= 0) {
+        continue;
+      }
+      usageByDate.set(
+        row.usage_date,
+        (usageByDate.get(row.usage_date) ?? 0) + totalSeconds
+      );
+    }
+
+    const rangeSeries = Array.from({ length: rangeDays }, (_, index) => {
+      const date = new Date(today);
+      date.setDate(today.getDate() - (rangeDays - 1 - index));
+      const dateKey = getIsoDate(date);
+      const seconds = usageByDate.get(dateKey) ?? 0;
+      const label =
+        rangeDays <= 7
+          ? DAY_LABELS[date.getDay()]
+          : `${date.getMonth() + 1}/${date.getDate()}`;
+      return { dateKey, seconds, label };
+    });
+
+    const totalSecondsRange = rangeSeries.reduce(
+      (sum, entry) => sum + entry.seconds,
+      0
+    );
+    const maxDailySeconds = Math.max(
+      ...rangeSeries.map((entry) => entry.seconds),
+      1
+    );
+
+    const hourlyTotals = new Array(24).fill(0);
+    for (const row of usageHourlyRows ?? []) {
+      if (row.package_name !== selectedApp.packageName) {
+        continue;
+      }
+      const hour = row.hour ?? 0;
+      if (hour < 0 || hour > 23) {
+        continue;
+      }
+      hourlyTotals[hour] += row.total_seconds ?? 0;
+    }
+
+    let peakHour = 0;
+    let peakSeconds = 0;
+    hourlyTotals.forEach((value, hour) => {
+      if (value > peakSeconds) {
+        peakSeconds = value;
+        peakHour = hour;
+      }
+    });
+
+    const totalHourlySeconds = hourlyTotals.reduce(
+      (sum, value) => sum + value,
+      0
+    );
+
+    const sumHours = (start: number, end: number) => {
+      let total = 0;
+      for (let hour = start; hour <= end; hour += 1) {
+        total += hourlyTotals[hour] ?? 0;
+      }
+      return total;
+    };
+
+    const segments = [
+      {
+        label: "Night",
+        value: sumHours(0, 5),
+        color: CHART_COLORS.night,
+      },
+      {
+        label: "Morning",
+        value: sumHours(6, 11),
+        color: CHART_COLORS.morning,
+      },
+      {
+        label: "Afternoon",
+        value: sumHours(12, 17),
+        color: CHART_COLORS.afternoon,
+      },
+      {
+        label: "Evening",
+        value: sumHours(18, 23),
+        color: CHART_COLORS.evening,
+      },
+    ];
+
+    return {
+      rangeSeries,
+      totalSecondsRange,
+      maxDailySeconds,
+      avgDailySeconds: totalSecondsRange / rangeDays,
+      peakHour,
+      peakSeconds,
+      totalHourlySeconds,
+      segments,
+    };
+  }, [rangeDays, selectedApp, today, usageHourlyRows, usageRows]);
+
+  const pieSlices = useMemo(() => {
+    if (!selectedUsageDetails || selectedUsageDetails.totalHourlySeconds <= 0) {
+      return [];
+    }
+
+    const radius = 48;
+    const center = radius;
+    let startAngle = 0;
+    return selectedUsageDetails.segments
+      .filter((segment) => segment.value > 0)
+      .map((segment) => {
+        const angle =
+          (segment.value / selectedUsageDetails.totalHourlySeconds) * 360;
+        const endAngle = startAngle + angle;
+        const path = describePieSlice(center, center, radius, startAngle, endAngle);
+        const slice = {
+          label: segment.label,
+          value: segment.value,
+          color: segment.color,
+          path,
+        };
+        startAngle = endAngle;
+        return slice;
+      });
+  }, [selectedUsageDetails]);
 
   const handleSignOut = () => {
     void signOut();
@@ -399,6 +669,11 @@ export default function ChildHomeScreen() {
   const showNoApps =
     !hasAppCatalog && appCards.length === 0 && !isLoading;
   const canSyncDevice = Boolean(childId) && canUseUsageStats();
+  const hasHourlyData =
+    (selectedUsageDetails?.totalHourlySeconds ?? 0) > 0;
+  const barLabelStep = selectedUsageDetails
+    ? Math.max(1, Math.ceil(selectedUsageDetails.rangeSeries.length / 6))
+    : 1;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -647,6 +922,155 @@ export default function ChildHomeScreen() {
             })}
           </ScrollView>
 
+          {selectedApp && selectedUsageDetails ? (
+            <View style={styles.detailCard}>
+              <View style={styles.detailHeader}>
+                <View style={styles.detailTitleGroup}>
+                  <Text style={styles.detailTitle}>{selectedApp.name}</Text>
+                  <Text style={styles.detailSubtitle}>
+                    {getAppCategoryLabel(selectedApp.category)} |{" "}
+                    {selectedApp.packageName}
+                  </Text>
+                </View>
+                <View style={styles.detailBadge}>
+                  <Text style={styles.detailBadgeText}>Selected</Text>
+                </View>
+              </View>
+              <Text style={styles.detailTotal}>
+                Total {rangeConfig.rangeLabel}:{" "}
+                {formatDuration(selectedUsageDetails.totalSecondsRange)}
+              </Text>
+
+              <View style={styles.kpiRow}>
+                <View style={styles.kpiCard}>
+                  <View style={styles.kpiIconBox}>
+                    <Ionicons
+                      name="stats-chart-outline"
+                      size={16}
+                      color={COLORS.primary}
+                    />
+                  </View>
+                  <Text style={styles.kpiLabel}>Avg per day</Text>
+                  <Text style={styles.kpiValue}>
+                    {formatDuration(selectedUsageDetails.avgDailySeconds)}
+                  </Text>
+                </View>
+                <View style={styles.kpiCard}>
+                  <View
+                    style={[
+                      styles.kpiIconBox,
+                      { backgroundColor: "#FEF3C7" },
+                    ]}
+                  >
+                    <Ionicons
+                      name="time-outline"
+                      size={16}
+                      color="#D97706"
+                    />
+                  </View>
+                  <Text style={styles.kpiLabel}>Most active</Text>
+                  <Text style={styles.kpiValue}>
+                    {hasHourlyData
+                      ? formatHourRangeLabel(selectedUsageDetails.peakHour)
+                      : "No data"}
+                  </Text>
+                  <Text style={styles.kpiSubvalue}>
+                    {hasHourlyData
+                      ? formatDuration(selectedUsageDetails.peakSeconds)
+                      : "No hourly usage yet"}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.chartStack}>
+                <View style={styles.chartCard}>
+                  <Text style={styles.chartTitle}>Usage by time of day</Text>
+                  {hasHourlyData ? (
+                    <View style={styles.pieRow}>
+                      <Svg width={96} height={96} viewBox="0 0 96 96">
+                        {pieSlices.map((slice) => (
+                          <Path
+                            key={slice.label}
+                            d={slice.path}
+                            fill={slice.color}
+                          />
+                        ))}
+                      </Svg>
+                      <View style={styles.legend}>
+                        {selectedUsageDetails.segments.map((segment) => (
+                          <View
+                            key={segment.label}
+                            style={styles.legendRow}
+                          >
+                            <View
+                              style={[
+                                styles.legendSwatch,
+                                { backgroundColor: segment.color },
+                              ]}
+                            />
+                            <View>
+                              <Text style={styles.legendLabel}>
+                                {segment.label}
+                              </Text>
+                              <Text style={styles.legendValue}>
+                                {formatDuration(segment.value)}
+                              </Text>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  ) : (
+                    <Text style={styles.chartEmpty}>
+                      No hourly usage yet.
+                    </Text>
+                  )}
+                </View>
+
+                <View style={styles.chartCard}>
+                  <Text style={styles.chartTitle}>Daily usage</Text>
+                  <View style={styles.barChart}>
+                    {selectedUsageDetails.rangeSeries.map((entry, index) => {
+                      const height =
+                        entry.seconds <= 0
+                          ? 2
+                          : Math.max(
+                              6,
+                              (entry.seconds /
+                                selectedUsageDetails.maxDailySeconds) *
+                                120
+                            );
+                      const showLabel =
+                        index % barLabelStep === 0 ||
+                        index ===
+                          selectedUsageDetails.rangeSeries.length - 1;
+                      return (
+                        <View key={entry.dateKey} style={styles.barColumn}>
+                          <View style={styles.barTrack}>
+                            <View
+                              style={[
+                                styles.barFill,
+                                { height, opacity: entry.seconds > 0 ? 1 : 0.4 },
+                              ]}
+                            />
+                          </View>
+                          <Text
+                            style={[
+                              styles.barLabel,
+                              !showLabel && styles.barLabelMuted,
+                            ]}
+                          >
+                            {showLabel ? entry.label : " "}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              </View>
+            </View>
+          ) : null}
+
           {showNoApps ? (
             <View style={styles.emptyCard}>
               <Ionicons name="apps" size={28} color={COLORS.primary} />
@@ -668,7 +1092,7 @@ export default function ChildHomeScreen() {
           ) : null}
 
           <View style={styles.appList}>
-            {filteredAppCards.map((app) => {
+            {filteredAppCards.map((app, index) => {
               const rawPercent = Math.min(
                 Math.round(app.progress * 100),
                 100
@@ -715,9 +1139,22 @@ export default function ChildHomeScreen() {
                 secondaryParts.push(`${app.openCount} opens`);
               }
 
+              const isSelected = selectedApp?.id === app.id;
+
               return (
-                <View key={app.id} style={styles.appRow}>
+                <Pressable
+                  key={app.id}
+                  onPress={() => setSelectedAppId(app.id)}
+                  style={({ pressed }) => [
+                    styles.appRow,
+                    isSelected && styles.appRowActive,
+                    pressed && styles.appRowPressed,
+                  ]}
+                >
                   <View style={styles.appIconRow}>
+                    <View style={styles.rankBadge}>
+                      <Text style={styles.rankText}>#{index + 1}</Text>
+                    </View>
                     <View style={styles.appIcon}>
                       <Ionicons name="apps" size={18} color={COLORS.primary} />
                     </View>
@@ -744,7 +1181,7 @@ export default function ChildHomeScreen() {
                       />
                     </View>
                   </View>
-                </View>
+                </Pressable>
               );
             })}
           </View>
@@ -1159,6 +1596,176 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontFamily: "Inter_700Bold",
   },
+  detailCard: {
+    padding: 16,
+    borderRadius: 20,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 16,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  detailHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  detailTitleGroup: {
+    flex: 1,
+    gap: 4,
+  },
+  detailTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: COLORS.text,
+    fontFamily: "Inter_700Bold",
+  },
+  detailSubtitle: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_400Regular",
+  },
+  detailBadge: {
+    backgroundColor: COLORS.primaryLight,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  detailBadgeText: {
+    fontSize: 11,
+    color: COLORS.primaryDark,
+    fontFamily: "Inter_600SemiBold",
+  },
+  detailTotal: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_500Medium",
+  },
+  kpiRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  kpiCard: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 6,
+  },
+  kpiIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: "#EFF6FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  kpiLabel: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_500Medium",
+    textTransform: "uppercase",
+  },
+  kpiValue: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: COLORS.text,
+    fontFamily: "Inter_700Bold",
+  },
+  kpiSubvalue: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_400Regular",
+  },
+  chartStack: {
+    gap: 12,
+  },
+  chartCard: {
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 10,
+  },
+  chartTitle: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_600SemiBold",
+    textTransform: "uppercase",
+  },
+  pieRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+  },
+  legend: {
+    flex: 1,
+    gap: 10,
+  },
+  legendRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  legendSwatch: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  legendLabel: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_500Medium",
+  },
+  legendValue: {
+    fontSize: 12,
+    color: COLORS.text,
+    fontFamily: "Inter_600SemiBold",
+  },
+  chartEmpty: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_400Regular",
+  },
+  barChart: {
+    height: 140,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 6,
+  },
+  barColumn: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 6,
+  },
+  barTrack: {
+    height: 120,
+    width: "100%",
+    justifyContent: "flex-end",
+    alignItems: "center",
+  },
+  barFill: {
+    width: "60%",
+    borderRadius: 6,
+    backgroundColor: COLORS.primary,
+  },
+  barLabel: {
+    fontSize: 10,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_500Medium",
+  },
+  barLabelMuted: {
+    opacity: 0,
+  },
   appList: {
     gap: 12,
   },
@@ -1170,10 +1777,32 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
+  appRowActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primaryLight,
+  },
+  appRowPressed: {
+    opacity: 0.9,
+  },
   appIconRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+  },
+  rankBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  rankText: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_600SemiBold",
   },
   appIcon: {
     width: 40,

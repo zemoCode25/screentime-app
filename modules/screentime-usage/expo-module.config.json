@@ -1,7 +1,6 @@
 {
-  "name": "screentime-usage",
   "platforms": ["android"],
   "android": {
-    "packageName": "com.screentime.usage"
+    "modules": ["com.screentime.usage.UsageStatsModule"]
   }
 }

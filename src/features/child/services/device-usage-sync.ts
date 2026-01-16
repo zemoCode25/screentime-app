@@ -27,7 +27,12 @@ const getDeviceId = () => {
   return "device:android";
 };
 
-const getIsoDate = (date: Date) => date.toISOString().slice(0, 10);
+const getIsoDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
 const getDayRange = (date: Date) => {
   const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -49,7 +54,55 @@ export async function syncChildDeviceUsage(
   }
 
   const installedApps = await fetchInstalledApps();
-  const appsPayload = installedApps.map((app) => ({
+
+  const now = new Date();
+  const deviceId = getDeviceId();
+  const usageByKey = new Map<
+    string,
+    Database["public"]["Tables"]["app_usage_daily"]["Insert"]
+  >();
+  const packagesWithUsage = new Set<string>();
+
+  for (let dayOffset = 0; dayOffset < days; dayOffset += 1) {
+    const day = new Date(now.getTime() - dayOffset * MS_PER_DAY);
+    const { start, end } = getDayRange(day);
+    const usageDate = getIsoDate(start);
+    const stats = await fetchUsageStats(start.getTime(), end.getTime());
+
+    for (const stat of stats) {
+      const totalSeconds = Math.round((stat.totalTimeMs ?? 0) / 1000);
+      if (totalSeconds <= 0) {
+        continue;
+      }
+      packagesWithUsage.add(stat.packageName);
+      const key = `${childId}:${stat.packageName}:${usageDate}`;
+      const existing = usageByKey.get(key);
+      if (existing) {
+        existing.total_seconds =
+          (existing.total_seconds ?? 0) + totalSeconds;
+        existing.last_synced_at = now.toISOString();
+        existing.device_id = deviceId;
+        continue;
+      }
+      usageByKey.set(key, {
+        child_id: childId,
+        package_name: stat.packageName,
+        total_seconds: totalSeconds,
+        open_count: 0,
+        usage_date: usageDate,
+        device_id: deviceId,
+        last_synced_at: now.toISOString(),
+      });
+    }
+  }
+
+  const filteredApps =
+    packagesWithUsage.size > 0
+      ? installedApps.filter((app) =>
+          packagesWithUsage.has(app.packageName)
+        )
+      : installedApps.filter((app) => !app.isSystemApp);
+  const appsPayload = filteredApps.map((app) => ({
     child_id: childId,
     app_name: app.appName,
     package_name: app.packageName,
@@ -67,38 +120,13 @@ export async function syncChildDeviceUsage(
     }
   }
 
-  const now = new Date();
-  const deviceId = getDeviceId();
-  const usagePayload: Database["public"]["Tables"]["app_usage_daily"]["Insert"][] =
-    [];
-
-  for (let dayOffset = 0; dayOffset < days; dayOffset += 1) {
-    const day = new Date(now.getTime() - dayOffset * MS_PER_DAY);
-    const { start, end } = getDayRange(day);
-    const stats = await fetchUsageStats(start.getTime(), end.getTime());
-
-    for (const stat of stats) {
-      const totalSeconds = Math.round((stat.totalTimeMs ?? 0) / 1000);
-      if (totalSeconds <= 0) {
-        continue;
-      }
-      usagePayload.push({
-        child_id: childId,
-        package_name: stat.packageName,
-        total_seconds: totalSeconds,
-        open_count: 0,
-        usage_date: getIsoDate(start),
-        device_id: deviceId,
-        last_synced_at: now.toISOString(),
-      });
-    }
-  }
+  const usagePayload = Array.from(usageByKey.values());
 
   if (usagePayload.length > 0) {
     const { error: usageError } = await supabase
       .from("app_usage_daily")
       .upsert(usagePayload, {
-        onConflict: "child_id,package_name,usage_date,device_id",
+        onConflict: "child_id,package_name,usage_date",
       });
 
     if (usageError) {
