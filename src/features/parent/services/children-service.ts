@@ -26,7 +26,10 @@ const CHILD_SELECT_FIELDS =
 function getDateDaysAgo(days: number) {
   const date = new Date();
   date.setDate(date.getDate() - days);
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 export async function fetchChildrenWithUsageSummary(): Promise<ChildListItem[]> {
@@ -179,4 +182,41 @@ export async function fetchChildUsageSummary(
     activeDays: activeDays.size,
     mostUsedPackage,
   };
+}
+
+export type AppUsageDetail = {
+  packageName: string;
+  totalSeconds: number;
+  openCount: number;
+};
+
+export async function fetchChildAppUsageDetails(
+  childId: string
+): Promise<AppUsageDetail[]> {
+  const startDate = getDateDaysAgo(CHILD_USAGE_WINDOW_DAYS);
+
+  const { data: usageRows, error } = await supabase
+    .from("app_usage_daily")
+    .select("package_name,total_seconds,open_count")
+    .eq("child_id", childId)
+    .gte("usage_date", startDate);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const packageMap = new Map<string, { totalSeconds: number; openCount: number }>();
+
+  for (const row of usageRows ?? []) {
+    const entry = packageMap.get(row.package_name) ?? { totalSeconds: 0, openCount: 0 };
+    entry.totalSeconds += row.total_seconds ?? 0;
+    entry.openCount += row.open_count ?? 0;
+    packageMap.set(row.package_name, entry);
+  }
+
+  return Array.from(packageMap.entries()).map(([packageName, data]) => ({
+    packageName,
+    totalSeconds: data.totalSeconds,
+    openCount: data.openCount,
+  }));
 }

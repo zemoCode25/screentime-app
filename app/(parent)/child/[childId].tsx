@@ -1,5 +1,6 @@
 ﻿import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -12,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   useChildApps,
+  useChildAppUsageDetails,
   useChildDetails,
   useChildUsageSummary,
 } from "@/src/features/parent/hooks/use-child-details";
@@ -41,18 +43,58 @@ export default function ParentChildScreen() {
   const router = useRouter();
   const { childId } = useLocalSearchParams();
   const resolvedChildId = Array.isArray(childId) ? childId[0] : childId;
+  const [visibleAppCount, setVisibleAppCount] = useState(15);
 
   const childQuery = useChildDetails(resolvedChildId);
   const usageQuery = useChildUsageSummary(resolvedChildId);
   const appsQuery = useChildApps(resolvedChildId);
+  const appUsageQuery = useChildAppUsageDetails(resolvedChildId);
 
   const isLoading =
-    childQuery.isLoading || usageQuery.isLoading || appsQuery.isLoading;
-  const error = childQuery.error || usageQuery.error || appsQuery.error || null;
+    childQuery.isLoading ||
+    usageQuery.isLoading ||
+    appsQuery.isLoading ||
+    appUsageQuery.isLoading;
+  const error =
+    childQuery.error ||
+    usageQuery.error ||
+    appsQuery.error ||
+    appUsageQuery.error ||
+    null;
 
   const child = childQuery.data;
   const usage = usageQuery.data;
   const apps = appsQuery.data ?? [];
+  const appUsageDetails = appUsageQuery.data ?? [];
+
+  // Create a map of usage by package name
+  const usageByPackage = useMemo(() => {
+    const map = new Map<string, { totalSeconds: number; openCount: number }>();
+    for (const detail of appUsageDetails) {
+      map.set(detail.packageName, {
+        totalSeconds: detail.totalSeconds,
+        openCount: detail.openCount,
+      });
+    }
+    return map;
+  }, [appUsageDetails]);
+
+  // Combine apps with usage data and sort by usage
+  const sortedApps = useMemo(() => {
+    return apps
+      .map((app) => {
+        const usage = usageByPackage.get(app.package_name);
+        return {
+          ...app,
+          totalSeconds: usage?.totalSeconds ?? 0,
+          openCount: usage?.openCount ?? 0,
+        };
+      })
+      .sort((a, b) => b.totalSeconds - a.totalSeconds);
+  }, [apps, usageByPackage]);
+
+  const visibleApps = sortedApps.slice(0, visibleAppCount);
+  const hasMoreApps = sortedApps.length > visibleAppCount;
 
   const appNameMap = new Map(
     apps.map((app) => [app.package_name, app.app_name])
@@ -61,6 +103,10 @@ export default function ParentChildScreen() {
   const mostUsedApp = usage?.mostUsedPackage
     ? appNameMap.get(usage.mostUsedPackage) ?? usage.mostUsedPackage
     : "No data yet";
+
+  const handleLoadMore = () => {
+    setVisibleAppCount((prev) => prev + 15);
+  };
 
   if (!resolvedChildId) {
     return (
@@ -205,10 +251,10 @@ export default function ParentChildScreen() {
           <View style={styles.appsHeader}>
             <Text style={styles.sectionTitleLarge}>Installed Apps</Text>
             <View style={styles.badge}>
-              <Text style={styles.badgeText}>{apps.length}</Text>
+              <Text style={styles.badgeText}>{sortedApps.length}</Text>
             </View>
           </View>
-          {apps.length === 0 ? (
+          {sortedApps.length === 0 ? (
             <View style={styles.emptyCard}>
               <Ionicons
                 name="apps-outline"
@@ -221,26 +267,74 @@ export default function ParentChildScreen() {
               </Text>
             </View>
           ) : (
-            apps.map((app) => (
-              <View key={app.id} style={styles.appRow}>
-                <View style={styles.appIcon}>
+            <>
+              {visibleApps.map((app, index) => (
+                <View key={app.id} style={styles.appRow}>
+                  <View style={styles.rankBadge}>
+                    <Text style={styles.rankText}>#{index + 1}</Text>
+                  </View>
+                  <View style={styles.appIcon}>
+                    <Ionicons
+                      name="cube-outline"
+                      size={20}
+                      color={COLORS.primary}
+                    />
+                  </View>
+                  <View style={styles.appInfo}>
+                    <Text style={styles.appName}>{app.app_name}</Text>
+                    <Text style={styles.appMeta}>
+                      {formatLabel(app.category)} •{" "}
+                      {formatDuration(app.totalSeconds)}
+                    </Text>
+                    {app.openCount > 0 ? (
+                      <Text style={styles.appUsageDetail}>
+                        {app.openCount} opens in last 30 days
+                      </Text>
+                    ) : null}
+                  </View>
+                  <View style={styles.appStatus}>
+                    <Ionicons
+                      name={
+                        app.totalSeconds > 0
+                          ? "trending-up"
+                          : "checkmark-circle"
+                      }
+                      size={16}
+                      color={app.totalSeconds > 0 ? COLORS.primary : "#16A34A"}
+                    />
+                  </View>
+                </View>
+              ))}
+              {hasMoreApps ? (
+                <Pressable
+                  onPress={handleLoadMore}
+                  style={({ pressed }) => [
+                    styles.loadMoreButton,
+                    pressed && styles.loadMoreButtonPressed,
+                  ]}
+                >
                   <Ionicons
-                    name="cube-outline"
+                    name="chevron-down"
                     size={20}
                     color={COLORS.primary}
                   />
-                </View>
-                <View style={styles.appInfo}>
-                  <Text style={styles.appName}>{app.app_name}</Text>
-                  <Text style={styles.appMeta}>
-                    {formatLabel(app.category)}
+                  <Text style={styles.loadMoreText}>
+                    Load more ({sortedApps.length - visibleAppCount} remaining)
+                  </Text>
+                </Pressable>
+              ) : sortedApps.length > 15 ? (
+                <View style={styles.allLoadedCard}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={20}
+                    color="#16A34A"
+                  />
+                  <Text style={styles.allLoadedText}>
+                    All {sortedApps.length} apps loaded
                   </Text>
                 </View>
-                <View style={styles.appStatus}>
-                  <Ionicons name="checkmark-circle" size={16} color="#16A34A" />
-                </View>
-              </View>
-            ))
+              ) : null}
+            </>
           )}
         </View>
       </ScrollView>
@@ -520,12 +614,27 @@ const styles = StyleSheet.create({
   appRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: 12,
     padding: 14,
     borderRadius: 16,
     backgroundColor: COLORS.surface,
     borderWidth: 1,
     borderColor: COLORS.border,
+  },
+  rankBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  rankText: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_600SemiBold",
   },
   appIcon: {
     width: 42,
@@ -537,6 +646,7 @@ const styles = StyleSheet.create({
   },
   appInfo: {
     flex: 1,
+    gap: 2,
   },
   appName: {
     fontSize: 15,
@@ -545,13 +655,51 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
   },
   appMeta: {
-    marginTop: 2,
     fontSize: 12,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_500Medium",
+  },
+  appUsageDetail: {
+    fontSize: 11,
     color: COLORS.textSecondary,
     fontFamily: "Inter_400Regular",
   },
   appStatus: {
     opacity: 0.8,
+  },
+  loadMoreButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+    backgroundColor: COLORS.primaryLight,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    marginTop: 8,
+  },
+  loadMoreButtonPressed: {
+    opacity: 0.7,
+  },
+  loadMoreText: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontFamily: "Inter_600SemiBold",
+  },
+  allLoadedCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  allLoadedText: {
+    fontSize: 13,
+    color: "#16A34A",
+    fontFamily: "Inter_500Medium",
   },
   centered: {
     flex: 1,
