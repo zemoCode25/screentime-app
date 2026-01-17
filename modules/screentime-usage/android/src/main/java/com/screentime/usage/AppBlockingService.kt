@@ -193,10 +193,7 @@ class AppBlockingService : AccessibilityService() {
         loadBlockedPackages()
 
         // Check if package is already blocked
-        val isBlocked = packageName in blockedPackages
-        Log.d(TAG, "Checking if $packageName is blocked: $isBlocked (blockedPackages contains: ${blockedPackages.take(5)})")
-        
-        if (isBlocked) {
+        if (packageName in blockedPackages) {
             blockApp(packageName)
             return
         }
@@ -553,7 +550,6 @@ class AppBlockingService : AccessibilityService() {
         val packages = sharedPrefs.getStringSet(KEY_BLOCKED_PACKAGES, emptySet()) ?: emptySet()
         blockedPackages.clear()
         blockedPackages.addAll(packages)
-        Log.d(TAG, "Loaded ${blockedPackages.size} blocked packages from prefs: ${blockedPackages.take(10)}")
     }
 
     private fun showBlockingScreen(packageName: String) {
