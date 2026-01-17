@@ -32,7 +32,9 @@ function getDateDaysAgo(days: number) {
   return `${year}-${month}-${day}`;
 }
 
-export async function fetchChildrenWithUsageSummary(): Promise<ChildListItem[]> {
+export async function fetchChildrenWithUsageSummary(): Promise<
+  ChildListItem[]
+> {
   const { data: children, error } = await supabase
     .from("children")
     .select(CHILD_SELECT_FIELDS)
@@ -65,11 +67,10 @@ export async function fetchChildrenWithUsageSummary(): Promise<ChildListItem[]> 
   >();
 
   for (const row of usageRows ?? []) {
-    const entry =
-      summaryByChild.get(row.child_id) ?? {
-        totalSeconds: 0,
-        activeDays: new Set<string>(),
-      };
+    const entry = summaryByChild.get(row.child_id) ?? {
+      totalSeconds: 0,
+      activeDays: new Set<string>(),
+    };
     entry.totalSeconds += row.total_seconds ?? 0;
     entry.activeDays.add(row.usage_date);
     summaryByChild.set(row.child_id, entry);
@@ -125,7 +126,9 @@ export async function fetchChildById(childId: string): Promise<ChildRow> {
 export async function fetchChildApps(childId: string): Promise<ChildAppRow[]> {
   const { data, error } = await supabase
     .from("child_apps")
-    .select("id,app_name,category,package_name,icon_path")
+    .select(
+      "id,app_name,category,package_name,icon_path,icon_url,child_id,created_at"
+    )
     .eq("child_id", childId)
     .order("app_name", { ascending: true });
 
@@ -137,9 +140,11 @@ export async function fetchChildApps(childId: string): Promise<ChildAppRow[]> {
 }
 
 export async function fetchChildUsageSummary(
-  childId: string
+  childId: string,
+  windowDays: number = CHILD_USAGE_WINDOW_DAYS
 ): Promise<ChildUsageSummary> {
-  const startDate = getDateDaysAgo(CHILD_USAGE_WINDOW_DAYS);
+  const resolvedWindowDays = Math.max(1, windowDays);
+  const startDate = getDateDaysAgo(resolvedWindowDays - 1);
 
   const { data: usageRows, error } = await supabase
     .from("app_usage_daily")
@@ -178,7 +183,7 @@ export async function fetchChildUsageSummary(
 
   return {
     totalSeconds,
-    avgDailySeconds: totalSeconds / CHILD_USAGE_WINDOW_DAYS,
+    avgDailySeconds: totalSeconds / resolvedWindowDays,
     activeDays: activeDays.size,
     mostUsedPackage,
   };
@@ -191,9 +196,11 @@ export type AppUsageDetail = {
 };
 
 export async function fetchChildAppUsageDetails(
-  childId: string
+  childId: string,
+  windowDays: number = CHILD_USAGE_WINDOW_DAYS
 ): Promise<AppUsageDetail[]> {
-  const startDate = getDateDaysAgo(CHILD_USAGE_WINDOW_DAYS);
+  const resolvedWindowDays = Math.max(1, windowDays);
+  const startDate = getDateDaysAgo(resolvedWindowDays - 1);
 
   const { data: usageRows, error } = await supabase
     .from("app_usage_daily")
@@ -205,10 +212,16 @@ export async function fetchChildAppUsageDetails(
     throw new Error(error.message);
   }
 
-  const packageMap = new Map<string, { totalSeconds: number; openCount: number }>();
+  const packageMap = new Map<
+    string,
+    { totalSeconds: number; openCount: number }
+  >();
 
   for (const row of usageRows ?? []) {
-    const entry = packageMap.get(row.package_name) ?? { totalSeconds: 0, openCount: 0 };
+    const entry = packageMap.get(row.package_name) ?? {
+      totalSeconds: 0,
+      openCount: 0,
+    };
     entry.totalSeconds += row.total_seconds ?? 0;
     entry.openCount += row.open_count ?? 0;
     packageMap.set(row.package_name, entry);
@@ -219,4 +232,114 @@ export async function fetchChildAppUsageDetails(
     totalSeconds: data.totalSeconds,
     openCount: data.openCount,
   }));
+}
+
+export type AppDailyUsage = {
+  usageDate: string;
+  totalSeconds: number;
+  openCount: number;
+};
+
+export type AppHourlyUsage = {
+  usageDate: string;
+  hour: number;
+  totalSeconds: number;
+};
+
+export type AppDetailedUsage = {
+  appName: string;
+  category: string;
+  packageName: string;
+  totalSeconds: number;
+  totalOpenCount: number;
+  avgDailySeconds: number;
+  activeDays: number;
+  dailyUsage: AppDailyUsage[];
+  hourlyUsage: AppHourlyUsage[];
+};
+
+export async function fetchChildAppDetailedUsage(
+  childId: string,
+  packageName: string,
+  windowDays: number = CHILD_USAGE_WINDOW_DAYS
+): Promise<AppDetailedUsage> {
+  const resolvedWindowDays = Math.max(1, windowDays);
+  const startDate = getDateDaysAgo(resolvedWindowDays - 1);
+
+  // Fetch app info
+  const { data: appData, error: appError } = await supabase
+    .from("child_apps")
+    .select("app_name,category,package_name")
+    .eq("child_id", childId)
+    .eq("package_name", packageName)
+    .maybeSingle();
+
+  if (appError) {
+    throw new Error(appError.message);
+  }
+
+  const appName = appData?.app_name ?? packageName;
+  const category = appData?.category ?? "other";
+
+  // Fetch daily usage
+  const { data: dailyRows, error: dailyError } = await supabase
+    .from("app_usage_daily")
+    .select("usage_date,total_seconds,open_count")
+    .eq("child_id", childId)
+    .eq("package_name", packageName)
+    .gte("usage_date", startDate)
+    .order("usage_date", { ascending: true });
+
+  if (dailyError) {
+    throw new Error(dailyError.message);
+  }
+
+  // Fetch hourly usage
+  const { data: hourlyRows, error: hourlyError } = await supabase
+    .from("app_usage_hourly")
+    .select("usage_date,hour,total_seconds")
+    .eq("child_id", childId)
+    .eq("package_name", packageName)
+    .gte("usage_date", startDate)
+    .order("usage_date", { ascending: true });
+
+  if (hourlyError) {
+    throw new Error(hourlyError.message);
+  }
+
+  const dailyUsage: AppDailyUsage[] = (dailyRows ?? []).map((row) => ({
+    usageDate: row.usage_date,
+    totalSeconds: row.total_seconds ?? 0,
+    openCount: row.open_count ?? 0,
+  }));
+
+  const hourlyUsage: AppHourlyUsage[] = (hourlyRows ?? []).map((row) => ({
+    usageDate: row.usage_date,
+    hour: row.hour ?? 0,
+    totalSeconds: row.total_seconds ?? 0,
+  }));
+
+  let totalSeconds = 0;
+  let totalOpenCount = 0;
+  const activeDaysSet = new Set<string>();
+
+  for (const row of dailyUsage) {
+    totalSeconds += row.totalSeconds;
+    totalOpenCount += row.openCount;
+    if (row.totalSeconds > 0) {
+      activeDaysSet.add(row.usageDate);
+    }
+  }
+
+  return {
+    appName,
+    category,
+    packageName,
+    totalSeconds,
+    totalOpenCount,
+    avgDailySeconds: totalSeconds / resolvedWindowDays,
+    activeDays: activeDaysSet.size,
+    dailyUsage,
+    hourlyUsage,
+  };
 }

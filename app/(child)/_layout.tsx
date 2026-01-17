@@ -59,6 +59,12 @@ export default function ChildTabsLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="blocked-app"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

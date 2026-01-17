@@ -1,5 +1,6 @@
 ﻿import { Ionicons } from "@expo/vector-icons";
 import { Link, useRouter } from "expo-router";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -28,10 +29,22 @@ const COLORS = {
   error: "#EF4444",
 };
 
+const FILTER_OPTIONS = [
+  { key: "all", label: "All" },
+  { key: "active", label: "Active" },
+  { key: "inactive", label: "No data" },
+  { key: "mostActive", label: "Most active" },
+  { key: "mostScreen", label: "Most screen time" },
+  { key: "az", label: "A-Z" },
+] as const;
+
+type ChildFilterKey = (typeof FILTER_OPTIONS)[number]["key"];
+
 export default function ParentHomeScreen() {
   const router = useRouter();
   const { profile, signOut } = useAuth();
   const { data: children, isLoading, error } = useChildrenList();
+  const [filter, setFilter] = useState<ChildFilterKey>("all");
 
   // Note: Simplified header interaction to match Child screen for consistency,
   // but we can bring back the menu if needed. For now, direct sign out button is cleaner.
@@ -41,6 +54,28 @@ export default function ParentHomeScreen() {
   };
 
   const childCount = children?.length ?? 0;
+  const filteredChildren = useMemo(() => {
+    const list = children ?? [];
+
+    switch (filter) {
+      case "active":
+        return list.filter((child) => child.activeDays > 0);
+      case "inactive":
+        return list.filter((child) => child.activeDays === 0);
+      case "mostActive":
+        return [...list].sort((a, b) => b.activeDays - a.activeDays);
+      case "mostScreen":
+        return [...list].sort(
+          (a, b) => b.avgDailySeconds - a.avgDailySeconds
+        );
+      case "az":
+        return [...list].sort((a, b) => a.name.localeCompare(b.name));
+      case "all":
+      default:
+        return list;
+    }
+  }, [children, filter]);
+  const visibleCount = filter === "all" ? childCount : filteredChildren.length;
 
   return (
     <SafeAreaView style={styles.screen} edges={["top"]}>
@@ -78,7 +113,7 @@ export default function ParentHomeScreen() {
           <View style={styles.sectionTitleRow}>
             <Text style={styles.sectionTitle}>Your Children</Text>
             <View style={styles.countBadge}>
-              <Text style={styles.countBadgeText}>{childCount}</Text>
+              <Text style={styles.countBadgeText}>{visibleCount}</Text>
             </View>
           </View>
           <Link href="/(parent)/child/register" asChild>
@@ -88,6 +123,37 @@ export default function ParentHomeScreen() {
             </Pressable>
           </Link>
         </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterRow}
+        >
+          {FILTER_OPTIONS.map((option) => {
+            const isActive = filter === option.key;
+            return (
+              <Pressable
+                key={option.key}
+                onPress={() => setFilter(option.key)}
+                style={({ pressed }) => [
+                  styles.filterButton,
+                  isActive && styles.filterButtonActive,
+                  pressed && styles.filterButtonPressed,
+                ]}
+              >
+                <Text
+                  style={
+                    isActive
+                      ? styles.filterButtonTextActive
+                      : styles.filterButtonText
+                  }
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
 
         {error ? (
           <View style={styles.errorCard}>
@@ -116,9 +182,21 @@ export default function ParentHomeScreen() {
           </View>
         ) : null}
 
+        {!isLoading && childCount > 0 && filteredChildren.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="filter-outline" size={32} color={COLORS.primary} />
+            </View>
+            <Text style={styles.emptyTitle}>No matches</Text>
+            <Text style={styles.emptyText}>
+              Try a different filter to see other children.
+            </Text>
+          </View>
+        ) : null}
+
         <View style={styles.childrenList}>
           {!isLoading &&
-            children?.map((child) => (
+            filteredChildren.map((child) => (
               <Pressable
                 key={child.id}
                 onPress={() =>
@@ -288,6 +366,36 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+  },
+  filterRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingVertical: 4,
+  },
+  filterButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  filterButtonActive: {
+    backgroundColor: COLORS.primaryLight,
+    borderColor: COLORS.primary,
+  },
+  filterButtonPressed: {
+    opacity: 0.9,
+  },
+  filterButtonText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_600SemiBold",
+  },
+  filterButtonTextActive: {
+    fontSize: 12,
+    color: COLORS.primaryDark,
+    fontFamily: "Inter_700Bold",
   },
   sectionTitleRow: {
     flexDirection: "row",

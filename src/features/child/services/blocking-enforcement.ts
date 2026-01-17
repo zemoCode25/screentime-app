@@ -1,8 +1,21 @@
 import type { Database } from "@/types/database-types";
 
+import {
+  getActiveConstraintType,
+  isDailyLimitExceeded,
+  isWithinBedtime,
+  isWithinFocusTime,
+  SYSTEM_ALLOWLIST,
+} from "./constraint-utils";
+
 type AppLimit = Database["public"]["Tables"]["app_limits"]["Row"];
 type AppAccessOverride =
   Database["public"]["Tables"]["app_access_overrides"]["Row"];
+type ChildTimeRule = Database["public"]["Tables"]["child_time_rules"]["Row"];
+type ChildUsageSettings =
+  Database["public"]["Tables"]["child_usage_settings"]["Row"];
+
+export type BlockReason = "bedtime" | "focus" | "daily_limit" | "app_limit";
 
 export type BlockedAppInfo = {
   packageName: string;
@@ -10,6 +23,26 @@ export type BlockedAppInfo = {
   usedSeconds: number;
   reason: "limit_exceeded";
 };
+
+export type BlockedPackageWithReason = {
+  packageName: string;
+  reason: BlockReason;
+};
+
+/**
+ * Converts app_limits applies_* fields to a day-of-week array
+ */
+function getLimitApplicableDays(limit: AppLimit): number[] {
+  const days: number[] = [];
+  if (limit.applies_sun) days.push(0);
+  if (limit.applies_mon) days.push(1);
+  if (limit.applies_tue) days.push(2);
+  if (limit.applies_wed) days.push(3);
+  if (limit.applies_thu) days.push(4);
+  if (limit.applies_fri) days.push(5);
+  if (limit.applies_sat) days.push(6);
+  return days;
+}
 
 /**
  * Determines which apps should be blocked based on:
@@ -29,7 +62,8 @@ export function calculateBlockedPackages(
 
   for (const limit of limits) {
     // Check if limit applies to today
-    if (!limit.applies_to_days?.includes(dayOfWeek)) {
+    const applicableDays = getLimitApplicableDays(limit);
+    if (!applicableDays.includes(dayOfWeek)) {
       continue;
     }
 
@@ -72,7 +106,8 @@ export function getBlockedAppsInfo(
   const dayOfWeek = now.getDay();
 
   for (const limit of limits) {
-    if (!limit.applies_to_days?.includes(dayOfWeek)) {
+    const applicableDays = getLimitApplicableDays(limit);
+    if (!applicableDays.includes(dayOfWeek)) {
       continue;
     }
 
@@ -123,7 +158,8 @@ export function isAppBlocked(
   }
 
   // Check if limit applies to today
-  if (!limit.applies_to_days?.includes(dayOfWeek)) {
+  const applicableDays = getLimitApplicableDays(limit);
+  if (!applicableDays.includes(dayOfWeek)) {
     return false;
   }
 
@@ -165,7 +201,8 @@ export function getTimeRemaining(
     return null;
   }
 
-  if (!limit.applies_to_days?.includes(dayOfWeek)) {
+  const applicableDays = getLimitApplicableDays(limit);
+  if (!applicableDays.includes(dayOfWeek)) {
     return null;
   }
 
@@ -173,4 +210,117 @@ export function getTimeRemaining(
   const remaining = limit.limit_seconds - usedSeconds;
 
   return remaining;
+}
+
+/**
+ * Calculates all blocked packages with their block reasons.
+ * This is the main enforcement function that checks:
+ * 1. Bedtime rules - if active, block ALL apps except allowlist
+ * 2. Focus time rules - if active, block ALL apps except allowlist
+ * 3. Global daily limit - if exceeded, block ALL apps except allowlist
+ * 4. Per-app limits (existing logic) - block specific apps
+ *
+ * @param appLimits - Per-app daily limits from parent
+ * @param usageToday - Map of package_name -> total_seconds for today
+ * @param overrides - Active access overrides from parent
+ * @param timeRules - Bedtime and focus time rules
+ * @param usageSettings - Global daily limit and weekend bonus settings
+ * @param allPackages - All installed app package names on the device
+ * @param now - Current date/time (optional, for testing)
+ */
+export function calculateAllBlockedPackages(
+  appLimits: AppLimit[],
+  usageToday: Map<string, number>,
+  overrides: AppAccessOverride[],
+  timeRules: ChildTimeRule[],
+  usageSettings: ChildUsageSettings | null,
+  allPackages: string[],
+  now: Date = new Date()
+): BlockedPackageWithReason[] {
+  const blocked: BlockedPackageWithReason[] = [];
+  const dayOfWeek = now.getDay();
+
+  // Filter out system apps that should never be blocked
+  const blockablePackages = allPackages.filter(
+    (pkg) => !SYSTEM_ALLOWLIST.includes(pkg)
+  );
+
+  // Check global constraints first (bedtime, focus, daily limit)
+  // These block ALL apps except system allowlist
+
+  // 1. Bedtime check - highest priority
+  if (isWithinBedtime(timeRules, now)) {
+    for (const packageName of blockablePackages) {
+      blocked.push({ packageName, reason: "bedtime" });
+    }
+    return blocked;
+  }
+
+  // 2. Focus time check
+  if (isWithinFocusTime(timeRules, now)) {
+    for (const packageName of blockablePackages) {
+      blocked.push({ packageName, reason: "focus" });
+    }
+    return blocked;
+  }
+
+  // 3. Global daily limit check
+  if (isDailyLimitExceeded(usageSettings, usageToday, now)) {
+    for (const packageName of blockablePackages) {
+      blocked.push({ packageName, reason: "daily_limit" });
+    }
+    return blocked;
+  }
+
+  // 4. Per-app limit checks (existing logic)
+  for (const limit of appLimits) {
+    const limitApplicableDays = getLimitApplicableDays(limit);
+
+    // Check if limit applies to today
+    if (!limitApplicableDays.includes(dayOfWeek)) {
+      console.log(
+        `[BlockingEnforcement] Limit for ${limit.package_name} skipped - doesn't apply today (day ${dayOfWeek}, applies to ${limitApplicableDays})`
+      );
+      continue;
+    }
+
+    const usedSeconds = usageToday.get(limit.package_name) ?? 0;
+
+    console.log(
+      `[BlockingEnforcement] ${limit.package_name}: used=${usedSeconds}s, limit=${limit.limit_seconds}s, exceeded=${usedSeconds >= limit.limit_seconds}`
+    );
+
+    // Check if limit is exceeded
+    if (usedSeconds < limit.limit_seconds) {
+      continue;
+    }
+
+    // Check if there's an active override
+    const hasOverride = overrides.some(
+      (override) =>
+        override.package_name === limit.package_name &&
+        override.status === "active" &&
+        new Date(override.expires_at) > now
+    );
+
+    if (hasOverride) {
+      continue;
+    }
+
+    // No override and limit exceeded -> block the app
+    blocked.push({ packageName: limit.package_name, reason: "app_limit" });
+  }
+
+  return blocked;
+}
+
+/**
+ * Gets the block reason for a specific package from a list of blocked packages
+ */
+export function getBlockReasonForPackage(
+  packageName: string,
+  blockedPackages: BlockedPackageWithReason[]
+): BlockReason | null {
+  const entry = blockedPackages.find((bp) => bp.packageName === packageName);
+  return entry?.reason ?? null;
 }

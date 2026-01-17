@@ -1,6 +1,7 @@
 import Constants from "expo-constants";
 
 import { supabase } from "@/lib/supabase";
+import { syncAppIconsForTopApps } from "@/src/features/child/services/icon-sync-service";
 import {
   canUseUsageStats,
   ensureUsageAccess,
@@ -16,6 +17,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 type SyncSummary = {
   appsSynced: number;
   usageRows: number;
+  iconsSynced: number;
   accessStatus: UsageAccessStatus;
 };
 
@@ -45,12 +47,17 @@ export async function syncChildDeviceUsage(
   days: number
 ): Promise<SyncSummary> {
   if (!canUseUsageStats()) {
-    return { appsSynced: 0, usageRows: 0, accessStatus: "unavailable" };
+    return {
+      appsSynced: 0,
+      usageRows: 0,
+      iconsSynced: 0,
+      accessStatus: "unavailable",
+    };
   }
 
   const accessStatus = await ensureUsageAccess();
   if (accessStatus !== "granted") {
-    return { appsSynced: 0, usageRows: 0, accessStatus };
+    return { appsSynced: 0, usageRows: 0, iconsSynced: 0, accessStatus };
   }
 
   const installedApps = await fetchInstalledApps();
@@ -62,6 +69,7 @@ export async function syncChildDeviceUsage(
     Database["public"]["Tables"]["app_usage_daily"]["Insert"]
   >();
   const packagesWithUsage = new Set<string>();
+  const usageByPackage = new Map<string, number>();
 
   for (let dayOffset = 0; dayOffset < days; dayOffset += 1) {
     const day = new Date(now.getTime() - dayOffset * MS_PER_DAY);
@@ -75,11 +83,14 @@ export async function syncChildDeviceUsage(
         continue;
       }
       packagesWithUsage.add(stat.packageName);
+      usageByPackage.set(
+        stat.packageName,
+        (usageByPackage.get(stat.packageName) ?? 0) + totalSeconds
+      );
       const key = `${childId}:${stat.packageName}:${usageDate}`;
       const existing = usageByKey.get(key);
       if (existing) {
-        existing.total_seconds =
-          (existing.total_seconds ?? 0) + totalSeconds;
+        existing.total_seconds = (existing.total_seconds ?? 0) + totalSeconds;
         existing.last_synced_at = now.toISOString();
         existing.device_id = deviceId;
         continue;
@@ -98,9 +109,7 @@ export async function syncChildDeviceUsage(
 
   const filteredApps =
     packagesWithUsage.size > 0
-      ? installedApps.filter((app) =>
-          packagesWithUsage.has(app.packageName)
-        )
+      ? installedApps.filter((app) => packagesWithUsage.has(app.packageName))
       : installedApps.filter((app) => !app.isSystemApp);
   const appsPayload = filteredApps.map((app) => ({
     child_id: childId,
@@ -134,9 +143,37 @@ export async function syncChildDeviceUsage(
     }
   }
 
+  // Sync icons for top apps with usage
+  let iconsSynced = 0;
+  try {
+    // Fetch current icon_url status from DB
+    const { data: appsWithIcons } = await supabase
+      .from("child_apps")
+      .select("package_name,icon_url")
+      .eq("child_id", childId);
+
+    const iconUrlMap = new Map<string, string | null>();
+    for (const app of appsWithIcons ?? []) {
+      iconUrlMap.set(app.package_name, app.icon_url);
+    }
+
+    const appsForIconSync = Array.from(usageByPackage.entries()).map(
+      ([packageName, totalSeconds]) => ({
+        packageName,
+        totalSeconds,
+        iconUrl: iconUrlMap.get(packageName) ?? null,
+      })
+    );
+
+    iconsSynced = await syncAppIconsForTopApps(childId, appsForIconSync);
+  } catch (iconErr) {
+    console.warn("Icon sync failed (non-critical):", iconErr);
+  }
+
   return {
     appsSynced: appsPayload.length,
     usageRows: usagePayload.length,
+    iconsSynced,
     accessStatus,
   };
 }

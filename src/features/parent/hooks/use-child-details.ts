@@ -1,6 +1,8 @@
 ﻿import { useQuery } from "@tanstack/react-query";
 
 import {
+  CHILD_USAGE_WINDOW_DAYS,
+  fetchChildAppDetailedUsage,
   fetchChildApps,
   fetchChildAppUsageDetails,
   fetchChildById,
@@ -23,18 +25,45 @@ export function useChildApps(childId?: string) {
   });
 }
 
-export function useChildUsageSummary(childId?: string) {
+export function useChildUsageSummary(childId?: string, windowDays?: number) {
+  const resolvedWindowDays = windowDays ?? CHILD_USAGE_WINDOW_DAYS;
   return useQuery({
-    queryKey: ["children", "usage-summary", childId],
-    queryFn: () => fetchChildUsageSummary(childId as string),
+    queryKey: ["children", "usage-summary", childId, resolvedWindowDays],
+    queryFn: () => fetchChildUsageSummary(childId as string, resolvedWindowDays),
     enabled: Boolean(childId),
   });
 }
 
-export function useChildAppUsageDetails(childId?: string) {
+export function useChildAppUsageDetails(childId?: string, windowDays?: number) {
+  const resolvedWindowDays = windowDays ?? CHILD_USAGE_WINDOW_DAYS;
   return useQuery({
-    queryKey: ["children", "app-usage-details", childId],
-    queryFn: () => fetchChildAppUsageDetails(childId as string),
+    queryKey: ["children", "app-usage-details", childId, resolvedWindowDays],
+    queryFn: () =>
+      fetchChildAppUsageDetails(childId as string, resolvedWindowDays),
     enabled: Boolean(childId),
+  });
+}
+
+export function useChildAppDetailedUsage(
+  childId?: string,
+  packageName?: string,
+  windowDays?: number
+) {
+  const resolvedWindowDays = windowDays ?? CHILD_USAGE_WINDOW_DAYS;
+  return useQuery({
+    queryKey: [
+      "children",
+      "app-detailed-usage",
+      childId,
+      packageName,
+      resolvedWindowDays,
+    ],
+    queryFn: () =>
+      fetchChildAppDetailedUsage(
+        childId as string,
+        packageName as string,
+        resolvedWindowDays
+      ),
+    enabled: Boolean(childId) && Boolean(packageName),
   });
 }

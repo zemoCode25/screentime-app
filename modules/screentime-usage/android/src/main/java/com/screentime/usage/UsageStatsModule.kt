@@ -7,11 +7,17 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
 import android.os.Build
 import android.provider.Settings
+import android.util.Base64
 import android.view.accessibility.AccessibilityManager
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import java.io.ByteArrayOutputStream
 
 class UsageStatsModule : Module() {
   override fun definition() = ModuleDefinition {
@@ -93,9 +99,49 @@ class UsageStatsModule : Module() {
       AppBlockingService.updateBlockedPackages(context, packages.toSet())
     }
 
+    AsyncFunction("updateBlockedPackagesWithReasons") { packages: List<Map<String, String>> ->
+      val context = appContext.reactContext ?: return@AsyncFunction null
+      AppBlockingService.updateBlockedPackagesWithReasons(context, packages)
+    }
+
     AsyncFunction("getBlockedPackages") {
       val context = appContext.reactContext ?: return@AsyncFunction emptyList<String>()
       AppBlockingService.getBlockedPackages(context).toList()
+    }
+
+    AsyncFunction("getBlockReason") { packageName: String ->
+      val context = appContext.reactContext ?: return@AsyncFunction null
+      AppBlockingService.getBlockReason(context, packageName)
+    }
+
+    AsyncFunction("updateAppLimits") { limitsJson: String ->
+      val context = appContext.reactContext ?: return@AsyncFunction null
+      AppBlockingService.updateAppLimits(context, limitsJson)
+    }
+
+    AsyncFunction("updateTimeRules") { rulesJson: String ->
+      val context = appContext.reactContext ?: return@AsyncFunction null
+      AppBlockingService.updateTimeRules(context, rulesJson)
+    }
+
+    AsyncFunction("updateDailyLimit") { settingsJson: String ->
+      val context = appContext.reactContext ?: return@AsyncFunction null
+      AppBlockingService.updateDailyLimit(context, settingsJson)
+    }
+
+    AsyncFunction("getAppIconBase64") { packageName: String ->
+      val context = appContext.reactContext ?: return@AsyncFunction null
+      try {
+        val pm = context.packageManager
+        val drawable = pm.getApplicationIcon(packageName)
+        val bitmap = drawableToBitmap(drawable, 64)
+        val outputStream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.PNG, 80, outputStream)
+        val bytes = outputStream.toByteArray()
+        Base64.encodeToString(bytes, Base64.NO_WRAP)
+      } catch (e: Exception) {
+        null
+      }
     }
   }
 
@@ -115,5 +161,17 @@ class UsageStatsModule : Module() {
       ApplicationInfo.CATEGORY_UNDEFINED -> "other"
       else -> "other"
     }
+  }
+
+  private fun drawableToBitmap(drawable: Drawable, size: Int): Bitmap {
+    if (drawable is BitmapDrawable && drawable.bitmap != null) {
+      return Bitmap.createScaledBitmap(drawable.bitmap, size, size, true)
+    }
+
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    drawable.setBounds(0, 0, size, size)
+    drawable.draw(canvas)
+    return bitmap
   }
 }

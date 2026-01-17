@@ -1,6 +1,6 @@
 ﻿import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -32,6 +32,14 @@ const COLORS = {
   errorLight: "#FEF2F2",
 };
 
+const TIME_FILTERS = [
+  { key: "today", label: "Today", days: 1 },
+  { key: "7d", label: "7D", days: 7 },
+  { key: "30d", label: "30D", days: 30 },
+] as const;
+
+type TimeFilterKey = (typeof TIME_FILTERS)[number]["key"];
+
 const formatLabel = (value: string) => {
   return value
     .split("_")
@@ -44,11 +52,20 @@ export default function ParentChildScreen() {
   const { childId } = useLocalSearchParams();
   const resolvedChildId = Array.isArray(childId) ? childId[0] : childId;
   const [visibleAppCount, setVisibleAppCount] = useState(15);
+  const [timeFilter, setTimeFilter] = useState<TimeFilterKey>("30d");
+  const selectedWindowDays =
+    TIME_FILTERS.find((option) => option.key === timeFilter)?.days ?? 30;
 
   const childQuery = useChildDetails(resolvedChildId);
-  const usageQuery = useChildUsageSummary(resolvedChildId);
+  const usageQuery = useChildUsageSummary(
+    resolvedChildId,
+    selectedWindowDays
+  );
   const appsQuery = useChildApps(resolvedChildId);
-  const appUsageQuery = useChildAppUsageDetails(resolvedChildId);
+  const appUsageQuery = useChildAppUsageDetails(
+    resolvedChildId,
+    selectedWindowDays
+  );
 
   const isLoading =
     childQuery.isLoading ||
@@ -93,8 +110,16 @@ export default function ParentChildScreen() {
       .sort((a, b) => b.totalSeconds - a.totalSeconds);
   }, [apps, usageByPackage]);
 
-  const visibleApps = sortedApps.slice(0, visibleAppCount);
-  const hasMoreApps = sortedApps.length > visibleAppCount;
+  const filteredApps = useMemo(
+    () =>
+      sortedApps.filter(
+        (app) => app.totalSeconds > 0 || app.openCount > 0
+      ),
+    [sortedApps]
+  );
+  const visibleApps = filteredApps.slice(0, visibleAppCount);
+  const hasMoreApps = filteredApps.length > visibleAppCount;
+  const appCount = filteredApps.length;
 
   const appNameMap = new Map(
     apps.map((app) => [app.package_name, app.app_name])
@@ -107,6 +132,10 @@ export default function ParentChildScreen() {
   const handleLoadMore = () => {
     setVisibleAppCount((prev) => prev + 15);
   };
+
+  useEffect(() => {
+    setVisibleAppCount(15);
+  }, [selectedWindowDays]);
 
   if (!resolvedChildId) {
     return (
@@ -203,7 +232,45 @@ export default function ParentChildScreen() {
           </View>
         ) : null}
 
-        <Text style={styles.sectionTitleLarge}>Activity Summary</Text>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitleLarge}>Activity Summary</Text>
+          <Text style={styles.sectionCaption}>
+            {selectedWindowDays === 1
+              ? "Today"
+              : `Last ${selectedWindowDays} days`}
+          </Text>
+        </View>
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterRow}
+        >
+          {TIME_FILTERS.map((option) => {
+            const isActive = option.key === timeFilter;
+            return (
+              <Pressable
+                key={option.key}
+                onPress={() => setTimeFilter(option.key)}
+                style={({ pressed }) => [
+                  styles.filterChip,
+                  isActive && styles.filterChipActive,
+                  pressed && styles.filterChipPressed,
+                ]}
+              >
+                <Text
+                  style={
+                    isActive
+                      ? styles.filterChipTextActive
+                      : styles.filterChipText
+                  }
+                >
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
 
         <View style={styles.metricsGrid}>
           <View style={styles.metricCard}>
@@ -251,10 +318,10 @@ export default function ParentChildScreen() {
           <View style={styles.appsHeader}>
             <Text style={styles.sectionTitleLarge}>Installed Apps</Text>
             <View style={styles.badge}>
-              <Text style={styles.badgeText}>{sortedApps.length}</Text>
+              <Text style={styles.badgeText}>{appCount}</Text>
             </View>
           </View>
-          {sortedApps.length === 0 ? (
+          {apps.length === 0 ? (
             <View style={styles.emptyCard}>
               <Ionicons
                 name="apps-outline"
@@ -266,10 +333,37 @@ export default function ParentChildScreen() {
                 App usage data will appear here once the child device syncs.
               </Text>
             </View>
+          ) : filteredApps.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Ionicons
+                name="time-outline"
+                size={32}
+                color={COLORS.textSecondary}
+              />
+              <Text style={styles.emptyTitle}>No usage yet</Text>
+              <Text style={styles.emptyText}>
+                Try a longer interval to see recent app activity.
+              </Text>
+            </View>
           ) : (
             <>
               {visibleApps.map((app, index) => (
-                <View key={app.id} style={styles.appRow}>
+                <Pressable
+                  key={app.id}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/(parent)/child/app/[packageName]",
+                      params: {
+                        childId: resolvedChildId,
+                        packageName: app.package_name,
+                      },
+                    })
+                  }
+                  style={({ pressed }) => [
+                    styles.appRow,
+                    pressed && styles.appRowPressed,
+                  ]}
+                >
                   <View style={styles.rankBadge}>
                     <Text style={styles.rankText}>#{index + 1}</Text>
                   </View>
@@ -288,22 +382,20 @@ export default function ParentChildScreen() {
                     </Text>
                     {app.openCount > 0 ? (
                       <Text style={styles.appUsageDetail}>
-                        {app.openCount} opens in last 30 days
+                        {selectedWindowDays === 1
+                          ? `${app.openCount} opens today`
+                          : `${app.openCount} opens in last ${selectedWindowDays} days`}
                       </Text>
                     ) : null}
                   </View>
                   <View style={styles.appStatus}>
                     <Ionicons
-                      name={
-                        app.totalSeconds > 0
-                          ? "trending-up"
-                          : "checkmark-circle"
-                      }
-                      size={16}
-                      color={app.totalSeconds > 0 ? COLORS.primary : "#16A34A"}
+                      name="chevron-forward"
+                      size={18}
+                      color={COLORS.textSecondary}
                     />
                   </View>
-                </View>
+                </Pressable>
               ))}
               {hasMoreApps ? (
                 <Pressable
@@ -319,18 +411,14 @@ export default function ParentChildScreen() {
                     color={COLORS.primary}
                   />
                   <Text style={styles.loadMoreText}>
-                    Load more ({sortedApps.length - visibleAppCount} remaining)
+                    Load more ({filteredApps.length - visibleAppCount} remaining)
                   </Text>
                 </Pressable>
-              ) : sortedApps.length > 15 ? (
+              ) : filteredApps.length > 15 ? (
                 <View style={styles.allLoadedCard}>
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={20}
-                    color="#16A34A"
-                  />
+                  <Ionicons name="checkmark-circle" size={20} color="#16A34A" />
                   <Text style={styles.allLoadedText}>
-                    All {sortedApps.length} apps loaded
+                    All {filteredApps.length} apps loaded
                   </Text>
                 </View>
               ) : null}
@@ -338,6 +426,21 @@ export default function ParentChildScreen() {
           )}
         </View>
       </ScrollView>
+
+      <Pressable
+        onPress={() =>
+          router.push({
+            pathname: "/(parent)/child/constraints",
+            params: { childId: resolvedChildId },
+          })
+        }
+        style={({ pressed }) => [
+          styles.fab,
+          pressed && styles.fabPressed,
+        ]}
+      >
+        <Ionicons name="add" size={28} color={COLORS.surface} />
+      </Pressable>
     </SafeAreaView>
   );
 }
@@ -519,6 +622,46 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontFamily: "Inter_700Bold",
   },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  sectionCaption: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_500Medium",
+  },
+  filterRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingBottom: 4,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  filterChipActive: {
+    backgroundColor: COLORS.primaryLight,
+    borderColor: COLORS.primary,
+  },
+  filterChipPressed: {
+    opacity: 0.9,
+  },
+  filterChipText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_600SemiBold",
+  },
+  filterChipTextActive: {
+    fontSize: 12,
+    color: COLORS.primaryDark,
+    fontFamily: "Inter_700Bold",
+  },
   metricsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -621,6 +764,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
+  appRowPressed: {
+    backgroundColor: "#F8FAFC",
+  },
   rankBadge: {
     width: 32,
     height: 32,
@@ -700,6 +846,26 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#16A34A",
     fontFamily: "Inter_500Medium",
+  },
+  fab: {
+    position: "absolute",
+    right: 24,
+    bottom: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  fabPressed: {
+    backgroundColor: COLORS.primaryDark,
+    transform: [{ scale: 0.98 }],
   },
   centered: {
     flex: 1,

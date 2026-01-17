@@ -3,6 +3,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,11 +17,14 @@ import Svg, { Path } from "react-native-svg";
 import { useAuth } from "@/src/features/auth/hooks/use-auth";
 import {
   useChildApps,
+  useChildConstraints,
   useChildLimits,
   useChildProfile,
   useChildUsageDaily,
   useChildUsageHourly,
 } from "@/src/features/child/hooks/use-child-data";
+import { type AppLimitRow } from "@/src/features/child/services/child-service";
+import { constraintEnforcementManager } from "@/src/features/child/services/constraint-enforcement-manager";
 import { syncChildDeviceUsage } from "@/src/features/child/services/device-usage-sync";
 import { canUseUsageStats } from "@/src/lib/usage-stats";
 import {
@@ -53,11 +58,53 @@ const CHART_COLORS = {
 };
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const DAY_SHORT_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const formatHourLabel = (hour: number) => {
   const hour12 = ((hour + 11) % 12) + 1;
   const period = hour >= 12 ? "PM" : "AM";
   return `${hour12} ${period}`;
+};
+
+const formatTimeFromSeconds = (seconds: number) => {
+  const normalized = ((seconds % 86400) + 86400) % 86400;
+  const hours = Math.floor(normalized / 3600);
+  const minutes = Math.floor((normalized % 3600) / 60);
+  const hour12 = ((hours + 11) % 12) + 1;
+  const period = hours >= 12 ? "PM" : "AM";
+  const minuteStr = minutes > 0 ? `:${String(minutes).padStart(2, "0")}` : "";
+  return `${hour12}${minuteStr} ${period}`;
+};
+
+const formatDaysShort = (days: number[]) => {
+  if (!days || days.length === 0) return "No days";
+  if (days.length === 7) return "Every day";
+  const weekdays = [1, 2, 3, 4, 5];
+  const weekends = [0, 6];
+  if (
+    days.length === 5 &&
+    weekdays.every((d) => days.includes(d)) &&
+    !days.includes(0) &&
+    !days.includes(6)
+  ) {
+    return "Weekdays";
+  }
+  if (days.length === 2 && weekends.every((d) => days.includes(d))) {
+    return "Weekends";
+  }
+  return days
+    .sort((a, b) => a - b)
+    .map((d) => DAY_SHORT_LABELS[d])
+    .join(", ");
+};
+
+const formatDurationHM = (seconds: number) => {
+  if (seconds <= 0) return "0m";
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours === 0) return `${minutes}m`;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${minutes}m`;
 };
 
 const formatHourRangeLabel = (hour: number) => {
@@ -97,11 +144,10 @@ const describePieSlice = (
   ].join(" ");
 };
 
-type AppLimitRow = Database["public"]["Tables"]["app_limits"]["Row"];
 type ChildAppRow = Database["public"]["Tables"]["child_apps"]["Row"];
 type AppBase = Pick<
   ChildAppRow,
-  "id" | "app_name" | "category" | "package_name" | "icon_path"
+  "id" | "app_name" | "category" | "package_name" | "icon_path" | "icon_url"
 >;
 
 type AppCard = {
@@ -109,6 +155,7 @@ type AppCard = {
   name: string;
   packageName: string;
   category: AppCategory;
+  iconUrl: string | null;
   totalSeconds: number;
   avgDailySeconds: number;
   openCount: number;
@@ -195,6 +242,92 @@ const getLimitSecondsForDate = (limit: AppLimitRow, date: Date) => {
   return limit.limit_seconds + bonusSeconds;
 };
 
+const Skeleton = ({
+  style,
+  borderRadius = 12,
+}: {
+  style?: any;
+  borderRadius?: number;
+}) => {
+  const opacity = useMemo(() => new Animated.Value(0.3), []);
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, {
+          toValue: 0.7,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 0.3,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [opacity]);
+
+  return (
+    <Animated.View
+      style={[{ backgroundColor: "#CBD5E1", opacity, borderRadius }, style]}
+    />
+  );
+};
+
+const ChildDashboardSkeleton = () => {
+  return (
+    <SafeAreaView style={styles.screen} edges={["top"]}>
+      <View style={styles.backgroundGlowTop} />
+      <View style={styles.content}>
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+            <Skeleton style={{ width: 48, height: 48 }} borderRadius={16} />
+            <View style={{ gap: 8 }}>
+              <Skeleton style={{ width: 100, height: 24 }} borderRadius={6} />
+              <Skeleton style={{ width: 60, height: 16 }} borderRadius={4} />
+            </View>
+          </View>
+          <Skeleton style={{ width: 40, height: 40 }} borderRadius={20} />
+        </View>
+
+        {/* Sync Card */}
+        <Skeleton style={{ width: "100%", height: 80 }} borderRadius={18} />
+
+        {/* Range Tabs */}
+        <View style={styles.rangeRow}>
+          <Skeleton style={{ flex: 1, height: 36 }} borderRadius={999} />
+          <Skeleton style={{ flex: 1, height: 36 }} borderRadius={999} />
+          <Skeleton style={{ flex: 1, height: 36 }} borderRadius={999} />
+        </View>
+
+        {/* Hero Card / Stats */}
+        <Skeleton style={{ width: "100%", height: 180 }} borderRadius={24} />
+
+        {/* Stats Grid */}
+        <View style={styles.statsGrid}>
+          <Skeleton style={{ flex: 1, height: 100 }} borderRadius={20} />
+          <Skeleton style={{ flex: 1, height: 100 }} borderRadius={20} />
+        </View>
+
+        {/* Apps Section */}
+        <View style={{ gap: 16, marginTop: 10 }}>
+          <Skeleton style={{ width: 140, height: 24 }} borderRadius={6} />
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <Skeleton style={{ width: 60, height: 30 }} borderRadius={999} />
+            <Skeleton style={{ width: 80, height: 30 }} borderRadius={999} />
+            <Skeleton style={{ width: 70, height: 30 }} borderRadius={999} />
+          </View>
+          <Skeleton style={{ width: "100%", height: 72 }} borderRadius={16} />
+          <Skeleton style={{ width: "100%", height: 72 }} borderRadius={16} />
+          <Skeleton style={{ width: "100%", height: 72 }} borderRadius={16} />
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+};
+
 export default function ChildHomeScreen() {
   const { profile, signOut } = useAuth();
   const queryClient = useQueryClient();
@@ -241,14 +374,49 @@ export default function ChildHomeScreen() {
     error: limitsError,
   } = useChildLimits(childId);
 
+  const {
+    data: constraints,
+    isLoading: constraintsLoading,
+    error: constraintsError,
+  } = useChildConstraints(childId);
+
   const isLoading =
     childLoading ||
     appsLoading ||
     usageLoading ||
     usageHourlyLoading ||
-    limitsLoading;
+    limitsLoading ||
+    constraintsLoading;
   const error =
-    childError ?? appsError ?? usageError ?? usageHourlyError ?? limitsError;
+    childError ??
+    appsError ??
+    usageError ??
+    usageHourlyError ??
+    limitsError ??
+    constraintsError;
+
+  // Process constraints data
+  const bedtimes = useMemo(() => {
+    if (!constraints?.timeRules) return [];
+    return constraints.timeRules.filter((rule) => rule.rule_type === "bedtime");
+  }, [constraints?.timeRules]);
+
+  const focusTimes = useMemo(() => {
+    if (!constraints?.timeRules) return [];
+    return constraints.timeRules.filter(
+      (rule) => rule.rule_type === "focus_time"
+    );
+  }, [constraints?.timeRules]);
+
+  const dailyLimitSeconds =
+    constraints?.usageSettings?.daily_limit_seconds ?? 0;
+  const weekendBonusSeconds =
+    constraints?.usageSettings?.weekend_bonus_seconds ?? 0;
+  const hasConstraints =
+    bedtimes.length > 0 ||
+    focusTimes.length > 0 ||
+    dailyLimitSeconds > 0 ||
+    weekendBonusSeconds > 0;
 
   const {
     appCards,
@@ -285,9 +453,10 @@ export default function ChildHomeScreen() {
         : Array.from(usageByPackage.keys()).map((packageName) => ({
             id: packageName,
             app_name: packageName,
-            category: "other",
+            category: "other" as const,
             package_name: packageName,
             icon_path: null,
+            icon_url: null,
           }));
 
     const usageValues = baseApps.map((app) => {
@@ -348,6 +517,7 @@ export default function ChildHomeScreen() {
           name: app.app_name,
           packageName: app.package_name,
           category: resolveAppCategory(app.category, app.package_name),
+          iconUrl: app.icon_url ?? null,
           totalSeconds: usage.totalSeconds,
           avgDailySeconds,
           openCount: usage.openCount,
@@ -434,6 +604,16 @@ export default function ChildHomeScreen() {
   useEffect(() => {
     setVisibleAppCount(15);
   }, [selectedCategory]);
+
+  // Start/stop constraint enforcement manager
+  useEffect(() => {
+    if (childId) {
+      constraintEnforcementManager.start(childId);
+    }
+    return () => {
+      constraintEnforcementManager.stop();
+    };
+  }, [childId]);
 
   const selectedApp = useMemo(() => {
     if (selectableApps.length === 0) {
@@ -590,6 +770,10 @@ export default function ChildHomeScreen() {
       });
   }, [selectedUsageDetails]);
 
+  if (isLoading) {
+    return <ChildDashboardSkeleton />;
+  }
+
   const handleSignOut = () => {
     void signOut();
   };
@@ -617,6 +801,9 @@ export default function ChildHomeScreen() {
         `Synced ${result.appsSynced} apps and ${result.usageRows} usage rows.`
       );
       await queryClient.invalidateQueries({ queryKey: ["child"] });
+
+      // Update constraint enforcement (bedtime, focus, limits)
+      await constraintEnforcementManager.evaluateNow();
     } catch (err) {
       setSyncError(
         err instanceof Error ? err.message : "Failed to sync device usage."
@@ -723,6 +910,127 @@ export default function ChildHomeScreen() {
           {syncError ? <Text style={styles.syncError}>{syncError}</Text> : null}
         </View>
 
+        {/* My Rules Section */}
+        {hasConstraints ? (
+          <View style={styles.rulesCard}>
+            <View style={styles.rulesHeader}>
+              <View style={styles.rulesIconBox}>
+                <Ionicons
+                  name="shield-checkmark"
+                  size={20}
+                  color={COLORS.primary}
+                />
+              </View>
+              <View>
+                <Text style={styles.rulesTitle}>My Rules</Text>
+                <Text style={styles.rulesSubtitle}>Set by your parent</Text>
+              </View>
+            </View>
+
+            <View style={styles.rulesGrid}>
+              {/* Bedtime */}
+              {bedtimes.length > 0 ? (
+                <View style={styles.ruleItem}>
+                  <View
+                    style={[
+                      styles.ruleIconBadge,
+                      { backgroundColor: "#EDE9FE" },
+                    ]}
+                  >
+                    <Ionicons name="moon" size={16} color="#7C3AED" />
+                  </View>
+                  <View style={styles.ruleContent}>
+                    <Text style={styles.ruleLabel}>Bedtime</Text>
+                    {bedtimes.map((rule, idx) => (
+                      <View key={rule.id ?? idx} style={styles.ruleDetail}>
+                        <Text style={styles.ruleTime}>
+                          {formatTimeFromSeconds(rule.start_seconds ?? 0)} –{" "}
+                          {formatTimeFromSeconds(rule.end_seconds ?? 0)}
+                        </Text>
+                        <Text style={styles.ruleDays}>
+                          {formatDaysShort(rule.days ?? [])}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+
+              {/* Focus Time */}
+              {focusTimes.length > 0 ? (
+                <View style={styles.ruleItem}>
+                  <View
+                    style={[
+                      styles.ruleIconBadge,
+                      { backgroundColor: "#FEF3C7" },
+                    ]}
+                  >
+                    <Ionicons name="flash" size={16} color="#D97706" />
+                  </View>
+                  <View style={styles.ruleContent}>
+                    <Text style={styles.ruleLabel}>Focus Time</Text>
+                    {focusTimes.map((rule, idx) => (
+                      <View key={rule.id ?? idx} style={styles.ruleDetail}>
+                        <Text style={styles.ruleTime}>
+                          {formatTimeFromSeconds(rule.start_seconds ?? 0)} –{" "}
+                          {formatTimeFromSeconds(rule.end_seconds ?? 0)}
+                        </Text>
+                        <Text style={styles.ruleDays}>
+                          {formatDaysShort(rule.days ?? [])}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+
+              {/* Daily Limit */}
+              {dailyLimitSeconds > 0 ? (
+                <View style={styles.ruleItem}>
+                  <View
+                    style={[
+                      styles.ruleIconBadge,
+                      { backgroundColor: "#DBEAFE" },
+                    ]}
+                  >
+                    <Ionicons name="time" size={16} color={COLORS.primary} />
+                  </View>
+                  <View style={styles.ruleContent}>
+                    <Text style={styles.ruleLabel}>Daily Limit</Text>
+                    <Text style={styles.ruleValue}>
+                      {formatDurationHM(dailyLimitSeconds)}
+                    </Text>
+                    <Text style={styles.ruleHint}>
+                      Total screen time per day
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+
+              {/* Weekend Bonus */}
+              {weekendBonusSeconds > 0 ? (
+                <View style={styles.ruleItem}>
+                  <View
+                    style={[
+                      styles.ruleIconBadge,
+                      { backgroundColor: "#D1FAE5" },
+                    ]}
+                  >
+                    <Ionicons name="gift" size={16} color={COLORS.success} />
+                  </View>
+                  <View style={styles.ruleContent}>
+                    <Text style={styles.ruleLabel}>Weekend Bonus</Text>
+                    <Text style={styles.ruleValue}>
+                      +{formatDurationHM(weekendBonusSeconds)}
+                    </Text>
+                    <Text style={styles.ruleHint}>Extra time on weekends</Text>
+                  </View>
+                </View>
+              ) : null}
+            </View>
+          </View>
+        ) : null}
+
         <View style={styles.rangeRow}>
           {rangeKeys.map((rangeKey) => {
             const isActive = rangeKey === timeRange;
@@ -753,13 +1061,6 @@ export default function ChildHomeScreen() {
           <View style={styles.errorCard}>
             <Ionicons name="alert-circle" size={20} color={COLORS.error} />
             <Text style={styles.errorText}>{error.message}</Text>
-          </View>
-        ) : null}
-
-        {isLoading ? (
-          <View style={styles.loadingCard}>
-            <ActivityIndicator color={COLORS.primary} />
-            <Text style={styles.loadingText}>Loading your day...</Text>
           </View>
         ) : null}
 
@@ -1095,7 +1396,18 @@ export default function ChildHomeScreen() {
                       <Text style={styles.rankText}>#{index + 1}</Text>
                     </View>
                     <View style={styles.appIcon}>
-                      <Ionicons name="apps" size={18} color={COLORS.primary} />
+                      {app.iconUrl ? (
+                        <Image
+                          source={{ uri: app.iconUrl }}
+                          style={styles.appIconImage}
+                        />
+                      ) : (
+                        <Ionicons
+                          name="apps"
+                          size={18}
+                          color={COLORS.primary}
+                        />
+                      )}
                     </View>
                     <View style={styles.appMeta}>
                       <Text style={styles.appName}>{app.name}</Text>
@@ -1726,6 +2038,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#EFF6FF",
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  appIconImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
   },
   appMeta: {
     flex: 1,
@@ -1824,5 +2142,97 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.success,
     fontFamily: "Inter_500Medium",
+  },
+  // My Rules section styles
+  rulesCard: {
+    padding: 16,
+    borderRadius: 20,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 16,
+  },
+  rulesHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  rulesIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: COLORS.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rulesTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: COLORS.text,
+    fontFamily: "Inter_700Bold",
+  },
+  rulesSubtitle: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_400Regular",
+    marginTop: 2,
+  },
+  rulesGrid: {
+    gap: 12,
+  },
+  ruleItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  ruleIconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ruleContent: {
+    flex: 1,
+    gap: 2,
+  },
+  ruleLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.text,
+    fontFamily: "Inter_600SemiBold",
+  },
+  ruleDetail: {
+    marginTop: 4,
+  },
+  ruleTime: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: COLORS.text,
+    fontFamily: "Inter_700Bold",
+  },
+  ruleDays: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_400Regular",
+    marginTop: 2,
+  },
+  ruleValue: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: COLORS.text,
+    fontFamily: "Inter_700Bold",
+    marginTop: 2,
+  },
+  ruleHint: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_400Regular",
+    marginTop: 2,
   },
 });

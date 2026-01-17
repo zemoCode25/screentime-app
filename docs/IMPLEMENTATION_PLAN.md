@@ -4,7 +4,7 @@ This doc is the guide for this session. Keep tasks small and verifiable. Do not 
 
 ## Current focus
 
-- Phase 2: Data model and RLS (verify RLS policies and child access)
+- Resolve schema drift between `docs/DB_SCHEMA.sql`, `types/database-types.ts`, and app code; then verify RLS.
 
 ## Target folder structure
 
@@ -49,10 +49,11 @@ src/
 
 ## Repo scan summary (current state)
 
-- Expo Router app with route groups in `app/(auth)`, `app/(parent)`, and `app/(child)` using placeholder screens.
-- Supabase client in `lib/supabase.ts` uses `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`.
-- Supabase types live in `types/database-types.ts` and the public schema is currently empty.
-- Supabase local config is in `supabase/config.toml` with no schema files configured.
+- Expo Router app with route groups in `app/(auth)`, `app/(parent)`, and `app/(child)` plus built-out screens (parent dashboard, child registration/detail/app detail, child home/analytics, override requests, blocked app).
+- Supabase client in `lib/supabase.ts` uses `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`; data hooks live in `src/features/*`.
+- `types/database-types.ts` includes tables/enums like `app_usage_hourly` and `app_limits.applies_*` that the app code expects.
+- `docs/DB_SCHEMA.sql` + `docs/API_CONTRACT.md` describe a different schema (e.g., `applies_to_days`, `child_device_id`, `insight_date`, enum values).
+- Supabase local config is in `supabase/config.toml` with no schema files configured; `docs/migrations/*` covers icon storage setup.
 
 ## Phase 0: Docs and baseline (this pass)
 
@@ -75,17 +76,24 @@ Verify
 
 ## Phase 2: Data model and RLS (current)
 
-- [x] ~~Apply schema in `docs/DB_SCHEMA.sql` (applied in Supabase)~~
+- [ ] Choose canonical schema source (docs vs generated types) and align code + docs
+- [ ] Align `app_limits` day-of-week fields (`applies_*` vs `applies_to_days`)
+- [ ] Align `app_usage_daily` device linkage (`device_id` vs `child_device_id`) and unique constraints
+- [ ] Add/rename `app_usage_hourly` (used in child analytics) or remove usage in app
+- [ ] Align enums + motivations (`app_category` values, `motivation_type` vs text[])
+- [ ] Align `ai_insights` shape (`insight_date` vs `period_start/period_end`)
+- [ ] Update `docs/DB_SCHEMA.sql` + `docs/API_CONTRACT.md` to match canonical schema
+- [ ] Refresh `docs/RLS_TESTS.sql` for the final columns
 - [ ] Regenerate `types/database-types.ts`
 - [ ] Verify RLS policies for parent and child access
 - [x] ~~Add `docs/RLS_TESTS.sql` for manual verification~~
 
 Verify
 
-- [ ] Run `docs/RLS_TESTS.sql` in Supabase SQL editor
+- [ ] Run updated `docs/RLS_TESTS.sql` in Supabase SQL editor
 - [ ] Parent reads and writes only their children
 - [ ] Child reads only their own data
-- [ ] Usage and limits upsert safely
+- [ ] Usage and limits upsert safely (daily + hourly)
 
 ## Phase 3: Auth and session
 
@@ -107,18 +115,18 @@ Verify
 
 ## Phase 4: Parent Home + Child Registration
 
-- [ ] Parent Home header: app title/logo + profile dropdown + sign out
-- [ ] Parent Home list of child cards (name, age, interests, avg screen time)
-- [ ] “+” opens Child Registration Form
-- [ ] Child Registration Form fields:
-  - [ ] name, age, grade_level
-  - [ ] interests[]
-  - [ ] motivations[]
-- [ ] Create child row in `children` with `parent_user_id = auth.uid()`
-- [ ] Refresh child list after add
-- [ ] Implement TanStack Query hooks:
-  - [ ] `useChildrenList()`
-  - [ ] `useCreateChild()`
+- [x] ~~Parent Home header: app title/logo + profile dropdown + sign out~~
+- [x] ~~Parent Home list of child cards (name, age, interests, avg screen time)~~
+- [x] ~~"+" opens Child Registration Form~~
+- [x] ~~Child Registration Form fields:~~
+  - [x] ~~name, age, grade_level~~
+  - [x] ~~interests[]~~
+  - [x] ~~motivations[]~~
+- [x] ~~Create child row in `children` with `parent_user_id = auth.uid()`~~
+- [x] ~~Refresh child list after add~~
+- [x] ~~Implement TanStack Query hooks:~~
+  - [x] ~~`useChildrenList()`~~
+  - [x] ~~`useCreateChild()`~~
 
 Verify
 
@@ -127,12 +135,12 @@ Verify
 
 ## Phase 5: Child Module Screens (Home + Analytics)
 
-- [ ] Child Home:
-  - [ ] list apps with usage today, limit, remaining time, progress bar
-- [ ] Child Analytics:
-  - [ ] KPIs: average trend, most used app, simple behavior label
-  - [ ] Pie chart: category distribution
-  - [ ] Bar chart: day/week/month totals
+- [x] ~~Child Home:~~
+  - [x] ~~list apps with usage today, limit, remaining time, progress bar~~
+- [x] ~~Child Analytics:~~
+  - [x] ~~KPIs: average trend, most used app, simple behavior label~~
+  - [x] ~~Pie chart: category distribution~~
+  - [x] ~~Bar chart: day/week/month totals~~
 - [ ] Ensure queries are RLS-safe (child sees only own records)
 
 Verify
@@ -141,9 +149,13 @@ Verify
 
 ## Phase 6: Device usage sync (Android MVP)
 
-- [ ] UsageStats permission flow
-- [ ] Daily aggregation and batch upsert
-- [ ] Update child_apps metadata
+- [x] ~~UsageStats permission flow~~
+- [x] ~~Daily aggregation and batch upsert~~
+- [x] ~~Update child_apps metadata~~
+- [x] ~~Icon sync to Supabase Storage (app-icons bucket)~~
+- [ ] Hourly aggregation + `app_usage_hourly` upsert for analytics charts
+- [x] ~~Override request + grant/deny flows~~
+- [x] ~~Blocking enforcement + blocked app screen~~
 
 Verify
 
