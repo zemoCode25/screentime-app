@@ -12,6 +12,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
+  AIInsightsCard,
+  InsightsSheet,
+  useAIInsights,
+  type AppLimitSuggestion,
+} from "@/src/features/ai";
+import {
   useChildApps,
   useChildAppUsageDetails,
   useChildDetails,
@@ -53,6 +59,7 @@ export default function ParentChildScreen() {
   const resolvedChildId = Array.isArray(childId) ? childId[0] : childId;
   const [visibleAppCount, setVisibleAppCount] = useState(15);
   const [timeFilter, setTimeFilter] = useState<TimeFilterKey>("30d");
+  const [insightsSheetVisible, setInsightsSheetVisible] = useState(false);
   const selectedWindowDays =
     TIME_FILTERS.find((option) => option.key === timeFilter)?.days ?? 30;
 
@@ -66,6 +73,29 @@ export default function ParentChildScreen() {
     resolvedChildId,
     selectedWindowDays
   );
+
+  // AI Insights
+  const {
+    insights,
+    isLoading: isLoadingInsights,
+    error: insightsError,
+    refresh: refreshInsights,
+    isRefreshing: isRefreshingInsights,
+    hasData: hasUsageData,
+  } = useAIInsights(resolvedChildId, 14);
+
+  const handleApplyLimit = (suggestion: AppLimitSuggestion) => {
+    // Navigate to the limit screen with pre-filled values
+    router.push({
+      pathname: "/(parent)/child/app/limit",
+      params: {
+        childId: resolvedChildId,
+        packageName: suggestion.packageName,
+        suggestedLimit: suggestion.suggestedLimitMinutes.toString(),
+      },
+    });
+    setInsightsSheetVisible(false);
+  };
 
   const isLoading =
     childQuery.isLoading ||
@@ -314,6 +344,18 @@ export default function ParentChildScreen() {
           </View>
         </View>
 
+        {/* AI Insights Section */}
+        {hasUsageData && (
+          <AIInsightsCard
+            insights={insights}
+            isLoading={isLoadingInsights}
+            error={insightsError}
+            onPress={() => setInsightsSheetVisible(true)}
+            onRefresh={refreshInsights}
+            isRefreshing={isRefreshingInsights}
+          />
+        )}
+
         <View style={styles.appsSection}>
           <View style={styles.appsHeader}>
             <Text style={styles.sectionTitleLarge}>Installed Apps</Text>
@@ -441,6 +483,18 @@ export default function ParentChildScreen() {
       >
         <Ionicons name="add" size={28} color={COLORS.surface} />
       </Pressable>
+
+      {/* AI Insights Sheet */}
+      <InsightsSheet
+        visible={insightsSheetVisible}
+        onClose={() => setInsightsSheetVisible(false)}
+        insights={insights}
+        isLoading={isLoadingInsights}
+        error={insightsError}
+        onApplyLimit={handleApplyLimit}
+        onRefresh={refreshInsights}
+        isRefreshing={isRefreshingInsights}
+      />
     </SafeAreaView>
   );
 }
