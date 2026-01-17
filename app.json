@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "screentime-app",
-    "slug": "screentime-app",
+    "name": "WellTime",
+    "slug": "welltime",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -52,8 +52,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "b9b0fe5e-81ab-4750-ad98-69c3954b40ac"
+        "projectId": "96e2ecc9-f990-42c6-8085-675e23ffae14"
       }
-    }
+    },
+    "owner": "r4lphbryan"
   }
 }

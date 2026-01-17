@@ -114,6 +114,21 @@ class UsageStatsModule : Module() {
       AppBlockingService.getBlockReason(context, packageName)
     }
 
+    AsyncFunction("updateAppLimits") { limitsJson: String ->
+      val context = appContext.reactContext ?: return@AsyncFunction null
+      AppBlockingService.updateAppLimits(context, limitsJson)
+    }
+
+    AsyncFunction("updateTimeRules") { rulesJson: String ->
+      val context = appContext.reactContext ?: return@AsyncFunction null
+      AppBlockingService.updateTimeRules(context, rulesJson)
+    }
+
+    AsyncFunction("updateDailyLimit") { settingsJson: String ->
+      val context = appContext.reactContext ?: return@AsyncFunction null
+      AppBlockingService.updateDailyLimit(context, settingsJson)
+    }
+
     AsyncFunction("getAppIconBase64") { packageName: String ->
       val context = appContext.reactContext ?: return@AsyncFunction null
       try {

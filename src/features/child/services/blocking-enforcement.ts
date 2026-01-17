@@ -278,10 +278,17 @@ export function calculateAllBlockedPackages(
 
     // Check if limit applies to today
     if (!limitApplicableDays.includes(dayOfWeek)) {
+      console.log(
+        `[BlockingEnforcement] Limit for ${limit.package_name} skipped - doesn't apply today (day ${dayOfWeek}, applies to ${limitApplicableDays})`
+      );
       continue;
     }
 
     const usedSeconds = usageToday.get(limit.package_name) ?? 0;
+
+    console.log(
+      `[BlockingEnforcement] ${limit.package_name}: used=${usedSeconds}s, limit=${limit.limit_seconds}s, exceeded=${usedSeconds >= limit.limit_seconds}`
+    );
 
     // Check if limit is exceeded
     if (usedSeconds < limit.limit_seconds) {

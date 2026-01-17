@@ -1,3 +1,5 @@
+import { AppState, type AppStateStatus } from "react-native";
+
 import { supabase } from "@/lib/supabase";
 import type { Database } from "@/types/database-types";
 
@@ -5,9 +7,19 @@ import {
   canUseAccessibility,
   checkAccessibilityEnabled,
   fetchInstalledApps,
+  fetchUsageStats,
+  setAppLimits,
   setBlockedPackagesWithReasons,
+  setTimeRules,
+  setDailyLimitSettings,
+  type TimeRule,
 } from "@/src/lib/usage-stats";
 
+import {
+  cancelAllConstraintAlarms,
+  configureNotifications,
+  scheduleConstraintAlarms,
+} from "./alarm-scheduler";
 import {
   BlockedPackageWithReason,
   calculateAllBlockedPackages,
@@ -20,8 +32,6 @@ type AppAccessOverrideRow =
 type ChildTimeRuleRow = Database["public"]["Tables"]["child_time_rules"]["Row"];
 type ChildUsageSettingsRow =
   Database["public"]["Tables"]["child_usage_settings"]["Row"];
-
-const EVALUATION_INTERVAL_MS = 60_000; // 60 seconds
 
 /**
  * Fetches app limits for a child
@@ -63,80 +73,140 @@ async function fetchActiveOverrides(
 }
 
 /**
- * Fetches today's usage for a child (as a Map of package_name -> total_seconds)
+ * Fetches today's usage directly from the device (real-time data).
+ * This uses Android UsageStats API instead of the database to get accurate,
+ * up-to-date usage information for enforcement decisions.
  */
-async function fetchTodayUsage(childId: string): Promise<Map<string, number>> {
-  const today = new Date();
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+async function fetchTodayUsageFromDevice(): Promise<Map<string, number>> {
+  const now = new Date();
+  // Start of today (midnight)
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startTimeMs = startOfDay.getTime();
+  const endTimeMs = now.getTime();
 
-  const { data, error } = await supabase
-    .from("app_usage_daily")
-    .select("package_name,total_seconds")
-    .eq("child_id", childId)
-    .eq("usage_date", todayStr);
+  try {
+    const stats = await fetchUsageStats(startTimeMs, endTimeMs);
 
-  if (error) {
-    console.error("[EnforcementManager] Failed to fetch today usage:", error);
+    const usageMap = new Map<string, number>();
+    for (const stat of stats) {
+      // Convert milliseconds to seconds
+      const totalSeconds = Math.round((stat.totalTimeMs ?? 0) / 1000);
+      if (totalSeconds > 0) {
+        usageMap.set(stat.packageName, totalSeconds);
+      }
+    }
+
+    console.log(
+      "[EnforcementManager] Fetched device usage for",
+      usageMap.size,
+      "apps"
+    );
+    return usageMap;
+  } catch (error) {
+    console.error(
+      "[EnforcementManager] Failed to fetch device usage:",
+      error
+    );
     return new Map();
   }
-
-  const usageMap = new Map<string, number>();
-  for (const row of data ?? []) {
-    usageMap.set(row.package_name, row.total_seconds);
-  }
-
-  return usageMap;
 }
 
 /**
- * Central manager for evaluating and enforcing screen time constraints.
- * Runs a periodic evaluation loop that:
- * 1. Fetches constraints, limits, overrides, and usage data
- * 2. Calculates which apps should be blocked
- * 3. Updates the native blocking service with the blocked list
+ * Event-driven manager for evaluating and enforcing screen time constraints.
+ *
+ * Unlike a polling approach, this manager only evaluates constraints when:
+ * 1. The app comes to the foreground (user opens the app)
+ * 2. A manual sync is triggered
+ * 3. Constraints are updated from the parent
+ *
+ * This approach saves battery by eliminating the 60-second polling interval.
  */
 class ConstraintEnforcementManager {
   private childId: string | null = null;
-  private intervalId: ReturnType<typeof setInterval> | null = null;
   private isEvaluating = false;
   private lastBlockedPackages: BlockedPackageWithReason[] = [];
+  private appStateSubscription: ReturnType<
+    typeof AppState.addEventListener
+  > | null = null;
+  private lastAppState: AppStateStatus = "unknown";
+  private isStarted = false;
 
   /**
-   * Start the enforcement loop for a child
+   * Start the enforcement manager for a child.
+   * Sets up event listeners for app state changes and schedules alarms.
    */
-  start(childId: string): void {
-    if (this.childId === childId && this.intervalId !== null) {
+  async start(childId: string): Promise<void> {
+    if (this.childId === childId && this.isStarted) {
       // Already running for this child
       return;
     }
 
-    this.stop();
+    await this.stop();
     this.childId = childId;
+    this.isStarted = true;
+    this.lastAppState = AppState.currentState;
 
-    console.log("[EnforcementManager] Starting for child:", childId);
+    console.log(
+      "[EnforcementManager] Starting event-driven mode for child:",
+      childId
+    );
 
-    // Run immediately, then on interval
-    this.evaluateNow();
-    this.intervalId = setInterval(() => {
-      this.evaluateNow();
-    }, EVALUATION_INTERVAL_MS);
+    // Configure notifications for alarm scheduling
+    await configureNotifications();
+
+    // Subscribe to app state changes
+    this.appStateSubscription = AppState.addEventListener(
+      "change",
+      this.handleAppStateChange
+    );
+
+    // Run initial evaluation (this will also schedule alarms)
+    await this.evaluateNow();
   }
 
   /**
-   * Stop the enforcement loop
+   * Stop the enforcement manager and clean up listeners.
    */
-  stop(): void {
-    if (this.intervalId !== null) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
+  async stop(): Promise<void> {
+    if (this.appStateSubscription) {
+      this.appStateSubscription.remove();
+      this.appStateSubscription = null;
     }
+
+    // Cancel all scheduled alarms
+    await cancelAllConstraintAlarms();
+
     this.childId = null;
     this.isEvaluating = false;
+    this.isStarted = false;
     console.log("[EnforcementManager] Stopped");
   }
 
   /**
-   * Trigger an immediate evaluation (e.g., after sync completes)
+   * Handle app state changes (foreground/background transitions).
+   * Triggers evaluation when the app comes to the foreground.
+   */
+  private handleAppStateChange = (nextAppState: AppStateStatus): void => {
+    // Only trigger evaluation when coming FROM background TO foreground
+    if (
+      (this.lastAppState === "background" ||
+        this.lastAppState === "inactive") &&
+      nextAppState === "active"
+    ) {
+      console.log(
+        "[EnforcementManager] App came to foreground, evaluating constraints"
+      );
+      this.evaluateNow();
+    }
+    this.lastAppState = nextAppState;
+  };
+
+  /**
+   * Trigger an immediate evaluation.
+   * Call this after:
+   * - Usage data sync completes
+   * - Parent updates constraints
+   * - Manual refresh
    */
   async evaluateNow(): Promise<void> {
     if (!this.childId) {
@@ -161,10 +231,28 @@ class ConstraintEnforcementManager {
   }
 
   /**
+   * Called when constraints are updated from the parent.
+   * This allows real-time updates without waiting for the next foreground event.
+   */
+  async onConstraintsUpdated(): Promise<void> {
+    console.log(
+      "[EnforcementManager] Constraints updated by parent, re-evaluating"
+    );
+    await this.evaluateNow();
+  }
+
+  /**
    * Get the last calculated blocked packages with reasons
    */
   getLastBlockedPackages(): BlockedPackageWithReason[] {
     return this.lastBlockedPackages;
+  }
+
+  /**
+   * Check if the manager is currently active
+   */
+  isActive(): boolean {
+    return this.isStarted && this.childId !== null;
   }
 
   /**
@@ -194,12 +282,14 @@ class ConstraintEnforcementManager {
     console.log("[EnforcementManager] Evaluating constraints for:", childId);
 
     // Fetch all required data in parallel
+    // IMPORTANT: usageToday is fetched from device (real-time) not database
+    // This ensures accurate enforcement even if sync hasn't run recently
     const [constraints, appLimits, overrides, usageToday, installedApps] =
       await Promise.all([
         fetchChildConstraints(childId),
         fetchAppLimits(childId),
         fetchActiveOverrides(childId),
-        fetchTodayUsage(childId),
+        fetchTodayUsageFromDevice(),
         fetchInstalledApps(),
       ]);
 
@@ -208,7 +298,46 @@ class ConstraintEnforcementManager {
 
     // Convert constraint types to match expected interface
     const timeRules = constraints.timeRules as ChildTimeRuleRow[];
-    const usageSettings = constraints.usageSettings as ChildUsageSettingsRow | null;
+    const usageSettings =
+      constraints.usageSettings as ChildUsageSettingsRow | null;
+
+    // Schedule alarms for bedtime/focus time transitions
+    if (timeRules.length > 0) {
+      await scheduleConstraintAlarms(timeRules, () => {
+        console.log("[EnforcementManager] Alarm triggered, re-evaluating");
+        this.evaluateNow();
+      });
+    }
+
+    // Push time rules to native for real-time enforcement
+    // This allows native to check bedtime/focus even when JS side hasn't recalculated
+    if (timeRules.length > 0) {
+      const nativeTimeRules: TimeRule[] = timeRules.map((rule) => ({
+        ruleType: rule.rule_type as "bedtime" | "focus",
+        startSeconds: rule.start_seconds,
+        endSeconds: rule.end_seconds,
+        days: rule.days,
+      }));
+      console.log(
+        "[EnforcementManager] Pushing time rules to native:",
+        nativeTimeRules.length
+      );
+      await setTimeRules(nativeTimeRules);
+    }
+
+    // Push daily limit settings to native for real-time enforcement
+    if (usageSettings && usageSettings.daily_limit_seconds > 0) {
+      console.log(
+        "[EnforcementManager] Pushing daily limit to native:",
+        usageSettings.daily_limit_seconds,
+        "bonus:",
+        usageSettings.weekend_bonus_seconds
+      );
+      await setDailyLimitSettings({
+        limitSeconds: usageSettings.daily_limit_seconds,
+        weekendBonusSeconds: usageSettings.weekend_bonus_seconds,
+      });
+    }
 
     // Calculate blocked packages with reasons
     const blockedPackages = calculateAllBlockedPackages(
@@ -230,6 +359,38 @@ class ConstraintEnforcementManager {
 
     // Update native module with blocked packages and reasons
     await setBlockedPackagesWithReasons(blockedPackages);
+
+    // Send total daily limits to native service for apps that apply today
+    // The native accessibility service will query UsageStatsManager for real-time
+    // usage and calculate accurate remaining time when the user opens each app
+    const appLimitsForToday: Record<string, number> = {};
+    const dayOfWeek = new Date().getDay();
+    const dayToFlag: Record<number, keyof AppLimitRow> = {
+      0: "applies_sun",
+      1: "applies_mon",
+      2: "applies_tue",
+      3: "applies_wed",
+      4: "applies_thu",
+      5: "applies_fri",
+      6: "applies_sat",
+    };
+
+    for (const limit of appLimits) {
+      const dayFlag = dayToFlag[dayOfWeek];
+      if (!limit[dayFlag]) continue; // Limit doesn't apply today
+
+      // Send total limit (native side calculates remaining using real-time usage)
+      appLimitsForToday[limit.package_name] = limit.limit_seconds;
+    }
+
+    if (Object.keys(appLimitsForToday).length > 0) {
+      console.log(
+        "[EnforcementManager] Setting app limits for native timers:",
+        Object.keys(appLimitsForToday).length,
+        "apps"
+      );
+      await setAppLimits(appLimitsForToday);
+    }
   }
 }
 

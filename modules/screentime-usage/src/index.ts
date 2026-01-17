@@ -5,6 +5,18 @@ export type BlockedPackageWithReason = {
   reason: string;
 };
 
+export type TimeRule = {
+  ruleType: "bedtime" | "focus";
+  startSeconds: number;
+  endSeconds: number;
+  days: number[];
+};
+
+export type DailyLimitSettings = {
+  limitSeconds: number;
+  weekendBonusSeconds: number;
+};
+
 type UsageStatsModuleType = {
   isUsageAccessGranted: () => boolean;
   openUsageAccessSettings: () => void;
@@ -35,6 +47,9 @@ type UsageStatsModuleType = {
   getBlockedPackages: () => Promise<string[]>;
   getBlockReason: (packageName: string) => Promise<string | null>;
   getAppIconBase64: (packageName: string) => Promise<string | null>;
+  updateAppLimits: (limitsJson: string) => Promise<void>;
+  updateTimeRules: (rulesJson: string) => Promise<void>;
+  updateDailyLimit: (settingsJson: string) => Promise<void>;
 };
 
 const UsageStatsModule =
@@ -100,4 +115,18 @@ export function getBlockReason(packageName: string) {
   return (
     UsageStatsModule?.getBlockReason?.(packageName) ?? Promise.resolve(null)
   );
+}
+
+export function updateAppLimits(limitsJson: string) {
+  return UsageStatsModule?.updateAppLimits?.(limitsJson) ?? Promise.resolve();
+}
+
+export function updateTimeRules(rules: TimeRule[]) {
+  const rulesJson = JSON.stringify(rules);
+  return UsageStatsModule?.updateTimeRules?.(rulesJson) ?? Promise.resolve();
+}
+
+export function updateDailyLimit(settings: DailyLimitSettings) {
+  const settingsJson = JSON.stringify(settings);
+  return UsageStatsModule?.updateDailyLimit?.(settingsJson) ?? Promise.resolve();
 }

@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
+import { useAppLimit } from "@/src/features/parent/hooks/use-app-limit";
 import { useChildAppDetailedUsage } from "@/src/features/parent/hooks/use-child-details";
 import { getAppCategoryLabel } from "@/src/utils/app-category";
 import { formatDuration } from "@/src/utils/time";
@@ -97,15 +98,35 @@ export default function ParentChildAppScreen() {
   const selectedWindowDays =
     TIME_FILTERS.find((option) => option.key === timeFilter)?.days ?? 30;
   const windowLabel =
-    selectedWindowDays === 1
-      ? "Today"
-      : `Last ${selectedWindowDays} Days`;
+    selectedWindowDays === 1 ? "Today" : `Last ${selectedWindowDays} Days`;
 
   const { data, isLoading, error } = useChildAppDetailedUsage(
     resolvedChildId,
     resolvedPackageName,
     selectedWindowDays
   );
+
+  const { data: appLimit } = useAppLimit(resolvedChildId, resolvedPackageName);
+
+  // Format active days for display
+  const activeDaysLabel = useMemo(() => {
+    if (!appLimit) return null;
+    const days = [
+      appLimit.applies_sun && "Sun",
+      appLimit.applies_mon && "Mon",
+      appLimit.applies_tue && "Tue",
+      appLimit.applies_wed && "Wed",
+      appLimit.applies_thu && "Thu",
+      appLimit.applies_fri && "Fri",
+      appLimit.applies_sat && "Sat",
+    ].filter(Boolean);
+    if (days.length === 7) return "Every day";
+    if (days.length === 5 && !appLimit.applies_sun && !appLimit.applies_sat)
+      return "Weekdays";
+    if (days.length === 2 && appLimit.applies_sun && appLimit.applies_sat)
+      return "Weekends";
+    return days.join(", ");
+  }, [appLimit]);
 
   const chartData = useMemo(() => {
     if (!data) {
@@ -242,8 +263,40 @@ export default function ParentChildAppScreen() {
         >
           <Ionicons name="arrow-back" size={20} color={COLORS.text} />
         </Pressable>
-        <Text style={styles.headerTitle}>App Details</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ flex: 1 }} />
+        <Pressable
+          onPress={() =>
+            router.push({
+              pathname: "/(parent)/child/app/limit",
+              params: {
+                childId: resolvedChildId,
+                packageName: resolvedPackageName,
+                appName: data?.appName ?? resolvedPackageName,
+              },
+            })
+          }
+          disabled={!hasData}
+          style={({ pressed }) => [
+            styles.addLimitButton,
+            pressed && styles.addLimitButtonPressed,
+            !hasData && styles.addLimitButtonDisabled,
+          ]}
+          hitSlop={8}
+        >
+          <Ionicons
+            name="add"
+            size={18}
+            color={hasData ? COLORS.primary : COLORS.textSecondary}
+          />
+          <Text
+            style={[
+              styles.addLimitButtonText,
+              !hasData && styles.addLimitButtonTextDisabled,
+            ]}
+          >
+            Set Limit
+          </Text>
+        </Pressable>
       </View>
 
       <ScrollView
@@ -279,6 +332,87 @@ export default function ParentChildAppScreen() {
                 <Text style={styles.appPackage}>{data.packageName}</Text>
               </View>
             </View>
+
+            {/* Current Limit Card */}
+            {appLimit ? (
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: "/(parent)/child/app/limit",
+                    params: {
+                      childId: resolvedChildId,
+                      packageName: resolvedPackageName,
+                      appName: data.appName,
+                    },
+                  })
+                }
+                style={({ pressed }) => [
+                  styles.limitCard,
+                  pressed && styles.limitCardPressed,
+                ]}
+              >
+                <View style={styles.limitHeader}>
+                  <View style={styles.limitIconBox}>
+                    <Ionicons name="timer" size={20} color={COLORS.warning} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.limitTitle}>Daily Limit Set</Text>
+                    <Text style={styles.limitDays}>{activeDaysLabel}</Text>
+                  </View>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={18}
+                    color={COLORS.textSecondary}
+                  />
+                </View>
+                <View style={styles.limitStats}>
+                  <View style={styles.limitStatItem}>
+                    <Text style={styles.limitStatLabel}>Limit</Text>
+                    <Text style={styles.limitStatValue}>
+                      {formatDuration(appLimit.limit_seconds)}
+                    </Text>
+                  </View>
+                  {appLimit.bonus_enabled ? (
+                    <View style={styles.limitStatItem}>
+                      <Text style={styles.limitStatLabel}>Bonus</Text>
+                      <Text
+                        style={[
+                          styles.limitStatValue,
+                          { color: COLORS.success },
+                        ]}
+                      >
+                        +{formatDuration(appLimit.bonus_seconds)}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: "/(parent)/child/app/limit",
+                    params: {
+                      childId: resolvedChildId,
+                      packageName: resolvedPackageName,
+                      appName: data.appName,
+                    },
+                  })
+                }
+                style={({ pressed }) => [
+                  styles.noLimitCard,
+                  pressed && styles.noLimitCardPressed,
+                ]}
+              >
+                <Ionicons
+                  name="timer-outline"
+                  size={20}
+                  color={COLORS.textSecondary}
+                />
+                <Text style={styles.noLimitText}>No daily limit set</Text>
+                <Text style={styles.noLimitAction}>Tap to add</Text>
+              </Pressable>
+            )}
 
             <ScrollView
               horizontal
@@ -394,9 +528,7 @@ export default function ParentChildAppScreen() {
 
             {/* Daily Usage Bar Chart */}
             <View style={styles.chartCard}>
-              <Text style={styles.chartTitle}>
-                Daily Usage ({windowLabel})
-              </Text>
+              <Text style={styles.chartTitle}>Daily Usage ({windowLabel})</Text>
               {hasDailyData && chartData ? (
                 <ScrollView
                   horizontal
@@ -514,6 +646,33 @@ const styles = StyleSheet.create({
   backButtonPressed: {
     backgroundColor: "#F1F5F9",
   },
+  addLimitButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: COLORS.primaryLight,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  addLimitButtonPressed: {
+    backgroundColor: "#BFDBFE",
+  },
+  addLimitButtonDisabled: {
+    backgroundColor: "#F1F5F9",
+    borderColor: COLORS.border,
+  },
+  addLimitButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.primary,
+    fontFamily: "Inter_600SemiBold",
+  },
+  addLimitButtonTextDisabled: {
+    color: COLORS.textSecondary,
+  },
   headerTitle: {
     fontSize: 17,
     fontWeight: "600",
@@ -522,7 +681,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
-    paddingBottom: 40,
+    paddingBottom: 80,
     gap: 20,
   },
   errorContainer: {
@@ -596,6 +755,87 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.textSecondary,
     fontFamily: "Inter_400Regular",
+  },
+  limitCard: {
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: "#FFFBEB",
+    borderWidth: 1,
+    borderColor: "#FCD34D",
+    gap: 12,
+  },
+  limitCardPressed: {
+    backgroundColor: "#FEF3C7",
+  },
+  limitHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  limitIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#FEF3C7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  limitTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: COLORS.text,
+    fontFamily: "Inter_600SemiBold",
+  },
+  limitDays: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_400Regular",
+    marginTop: 2,
+  },
+  limitStats: {
+    flexDirection: "row",
+    gap: 24,
+    paddingLeft: 52,
+  },
+  limitStatItem: {
+    gap: 2,
+  },
+  limitStatLabel: {
+    fontSize: 11,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_500Medium",
+    textTransform: "uppercase",
+  },
+  limitStatValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: COLORS.text,
+    fontFamily: "Inter_700Bold",
+  },
+  noLimitCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: "dashed",
+  },
+  noLimitCardPressed: {
+    backgroundColor: "#F8FAFC",
+  },
+  noLimitText: {
+    flex: 1,
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    fontFamily: "Inter_500Medium",
+  },
+  noLimitAction: {
+    fontSize: 13,
+    color: COLORS.primary,
+    fontFamily: "Inter_600SemiBold",
   },
   sectionTitle: {
     fontSize: 16,

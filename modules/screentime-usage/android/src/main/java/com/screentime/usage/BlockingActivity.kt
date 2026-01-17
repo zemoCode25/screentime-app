@@ -3,10 +3,8 @@ package com.screentime.usage
 import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
-import androidx.appcompat.app.AppCompatActivity
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
-import com.facebook.react.bridge.Arguments
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
 
@@ -19,37 +17,27 @@ class BlockingActivity : ReactActivity() {
     override fun getMainComponentName(): String = "BlockedAppScreen"
 
     /**
-     * Returns the instance of the [ReactActivityDelegate]. We use [DefaultReactActivityDelegate]
-     * which allows you to enable New Architecture with a single boolean flag [fabricEnabled]
+     * Returns the instance of the [ReactActivityDelegate]. We use a custom delegate
+     * that passes the blocked package info as initial props.
      */
-    override fun createReactActivityDelegate(): ReactActivityDelegate =
-        DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled)
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        // Get the blocked package name from intent
-        val blockedPackage = intent.getStringExtra("blocked_package") ?: ""
-
-        // Store it so React Native can access it via NativeModules
-        val props = Arguments.createMap()
-        props.putString("blockedPackage", blockedPackage)
-
-        // Note: props will be passed via getLaunchOptions()
-    }
-
-    override fun getLaunchOptions(): Bundle? {
-        val blockedPackage = intent.getStringExtra("blocked_package") ?: ""
-        val blockReason = AppBlockingService.getBlockReason(this, blockedPackage) ?: "app_limit"
-        val bundle = Bundle()
-        bundle.putString("blockedPackage", blockedPackage)
-        bundle.putString("blockReason", blockReason)
-        return bundle
+    override fun createReactActivityDelegate(): ReactActivityDelegate {
+        return object : DefaultReactActivityDelegate(this, mainComponentName, fabricEnabled) {
+            override fun getLaunchOptions(): Bundle {
+                val blockedPackage = intent?.getStringExtra("blocked_package") ?: ""
+                val blockReason = AppBlockingService.getBlockReason(this@BlockingActivity, blockedPackage) ?: "app_limit"
+                
+                return Bundle().apply {
+                    putString("blockedPackage", blockedPackage)
+                    putString("blockReason", blockReason)
+                }
+            }
+        }
     }
 
     /**
      * Override back button to go to home instead of closing the blocking screen
      */
+    @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         goToHome()
     }

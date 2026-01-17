@@ -10,9 +10,14 @@ import {
   isUsageModuleAvailable,
   openUsageAccessSettings,
   requestAccessibilityPermission,
+  updateAppLimits,
   updateBlockedPackages,
   updateBlockedPackagesWithReasons,
+  updateTimeRules,
+  updateDailyLimit,
   type BlockedPackageWithReason,
+  type TimeRule,
+  type DailyLimitSettings,
 } from "screentime-usage";
 
 export type InstalledApp = {
@@ -131,3 +136,49 @@ export async function fetchBlockReason(
   }
   return getBlockReason(packageName);
 }
+
+/**
+ * Sets total daily limits for apps.
+ * The native accessibility service will query UsageStatsManager for real-time
+ * usage and calculate accurate remaining time when each app is opened.
+ * @param limits Map of packageName -> limitSeconds (total daily limit)
+ */
+export async function setAppLimits(
+  limits: Record<string, number>
+): Promise<void> {
+  if (!canUseAccessibility()) {
+    return;
+  }
+  await updateAppLimits(JSON.stringify(limits));
+}
+
+/**
+ * Sets time rules (bedtime and focus time) in the native accessibility service.
+ * The native service will check these rules directly when apps are opened,
+ * ensuring enforcement works even when the JS side hasn't recalculated.
+ * @param rules Array of time rules with ruleType, startSeconds, endSeconds, and days
+ */
+export async function setTimeRules(rules: TimeRule[]): Promise<void> {
+  if (!canUseAccessibility()) {
+    return;
+  }
+  await updateTimeRules(rules);
+}
+
+/**
+ * Sets daily limit settings in the native accessibility service.
+ * The native service will check total usage directly when apps are opened,
+ * ensuring enforcement works even when the JS side hasn't recalculated.
+ * @param settings Daily limit and weekend bonus settings
+ */
+export async function setDailyLimitSettings(
+  settings: DailyLimitSettings
+): Promise<void> {
+  if (!canUseAccessibility()) {
+    return;
+  }
+  await updateDailyLimit(settings);
+}
+
+// Re-export types for convenience
+export type { TimeRule, DailyLimitSettings };
