@@ -211,17 +211,9 @@ export function AIInsightsCard({
               <View style={styles.trendRow}>
                 <Ionicons
                   name={getTrendIcon(insights.weeklyTrend)}
-                  size={16}
+                  size={24}
                   color={getTrendColor(insights.weeklyTrend)}
                 />
-                <Text
-                  style={[
-                    styles.trendText,
-                    { color: getTrendColor(insights.weeklyTrend) },
-                  ]}
-                >
-                  {insights.weeklyTrend}
-                </Text>
               </View>
             </View>
           </View>
@@ -378,11 +370,7 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: 2,
   },
-  trendText: {
-    fontSize: 13,
-    fontWeight: "600",
-    fontFamily: "Inter_600SemiBold",
-  },
+
   suggestionsBadge: {
     flexDirection: "row",
     alignItems: "center",
