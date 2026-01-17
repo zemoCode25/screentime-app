@@ -37,7 +37,7 @@ export function HealthScoreRing({
 }: HealthScoreRingProps) {
   const color = getScoreColor(score);
   const label = getScoreLabel(score);
-  const borderWidth = size * 0.08;
+  const borderWidth = size * 0.085;
   const innerSize = size - borderWidth * 2;
 
   return (
@@ -61,6 +61,7 @@ export function HealthScoreRing({
             height: innerSize,
             borderRadius: innerSize / 2,
             backgroundColor: `${color}10`,
+            gap: size * 0.02,
           },
         ]}
       >

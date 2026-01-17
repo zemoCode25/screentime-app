@@ -54,7 +54,7 @@ interface InsightsSheetProps {
 }
 
 function getInsightIcon(
-  type: BehavioralInsight["type"]
+  type: BehavioralInsight["type"],
 ): keyof typeof Ionicons.glyphMap {
   switch (type) {
     case "pattern":
@@ -72,14 +72,17 @@ function getInsightIcon(
 
 function getInsightColors(
   type: BehavioralInsight["type"],
-  severity?: BehavioralInsight["severity"]
+  severity?: BehavioralInsight["severity"],
 ) {
   if (type === "concern") {
-    if (severity === "critical") return { bg: COLORS.errorLight, text: COLORS.error };
+    if (severity === "critical")
+      return { bg: COLORS.errorLight, text: COLORS.error };
     return { bg: COLORS.warningLight, text: COLORS.warning };
   }
-  if (type === "positive") return { bg: COLORS.successLight, text: COLORS.success };
-  if (type === "recommendation") return { bg: COLORS.primaryLight, text: COLORS.primary };
+  if (type === "positive")
+    return { bg: COLORS.successLight, text: COLORS.success };
+  if (type === "recommendation")
+    return { bg: COLORS.primaryLight, text: COLORS.primary };
   return { bg: COLORS.infoLight, text: COLORS.info };
 }
 
@@ -105,7 +108,11 @@ export function InsightsSheet({
   const [selectedSuggestion, setSelectedSuggestion] =
     useState<AppLimitSuggestion | null>(null);
 
-  const tabs: { key: TabKey; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  const tabs: {
+    key: TabKey;
+    label: string;
+    icon: keyof typeof Ionicons.glyphMap;
+  }[] = [
     { key: "overview", label: "Overview", icon: "pie-chart-outline" },
     { key: "suggestions", label: "Suggestions", icon: "bulb-outline" },
     { key: "patterns", label: "Patterns", icon: "analytics-outline" },
@@ -139,7 +146,11 @@ export function InsightsSheet({
     if (!insights) {
       return (
         <View style={styles.centerContent}>
-          <Ionicons name="sparkles-outline" size={48} color={COLORS.textSecondary} />
+          <Ionicons
+            name="sparkles-outline"
+            size={48}
+            color={COLORS.textSecondary}
+          />
           <Text style={styles.emptyTitle}>No insights available</Text>
           <Text style={styles.emptyMessage}>
             More usage data is needed to generate AI insights
@@ -184,15 +195,24 @@ export function InsightsSheet({
             {/* Health Score Section */}
             <View style={styles.section}>
               <View style={styles.healthScoreCard}>
-                <HealthScoreRing score={insights.overallHealthScore} size={110} />
+                <HealthScoreRing
+                  score={insights.overallHealthScore}
+                  size={110}
+                />
                 <View style={styles.healthScoreInfo}>
-                  <Text style={styles.healthScoreLabel}>Screen Time Health</Text>
+                  <Text style={styles.healthScoreLabel}>
+                    Screen Time Health
+                  </Text>
                   <Text style={styles.healthScoreDescription}>
                     Based on {insights.childAge}-year-old usage guidelines
                   </Text>
                   <View style={styles.statsRow}>
                     <View style={styles.statPill}>
-                      <Ionicons name="time-outline" size={14} color={COLORS.primary} />
+                      <Ionicons
+                        name="time-outline"
+                        size={14}
+                        color={COLORS.primary}
+                      />
                       <Text style={styles.statPillText}>
                         {formatMinutes(insights.totalDailyAverageMinutes)}/day
                       </Text>
@@ -203,19 +223,21 @@ export function InsightsSheet({
                           insights.weeklyTrend === "increasing"
                             ? "trending-up"
                             : insights.weeklyTrend === "decreasing"
-                            ? "trending-down"
-                            : "remove-outline"
+                              ? "trending-down"
+                              : "remove-outline"
                         }
                         size={14}
                         color={
                           insights.weeklyTrend === "increasing"
                             ? COLORS.warning
                             : insights.weeklyTrend === "decreasing"
-                            ? COLORS.success
-                            : COLORS.textSecondary
+                              ? COLORS.success
+                              : COLORS.textSecondary
                         }
                       />
-                      <Text style={styles.statPillText}>{insights.weeklyTrend}</Text>
+                      <Text style={styles.statPillText}>
+                        {insights.weeklyTrend}
+                      </Text>
                     </View>
                   </View>
                 </View>
@@ -251,7 +273,11 @@ export function InsightsSheet({
                     style={styles.seeAllButton}
                   >
                     <Text style={styles.seeAllText}>See All</Text>
-                    <Ionicons name="arrow-forward" size={14} color={COLORS.primary} />
+                    <Ionicons
+                      name="arrow-forward"
+                      size={14}
+                      color={COLORS.primary}
+                    />
                   </Pressable>
                 </View>
                 <View style={styles.quickActionsList}>
@@ -289,7 +315,7 @@ export function InsightsSheet({
               {/* Group by priority */}
               {["high", "medium", "low"].map((priority) => {
                 const suggestions = insights.limitSuggestions.filter(
-                  (s) => s.priority === priority
+                  (s) => s.priority === priority,
                 );
                 if (suggestions.length === 0) return null;
 
@@ -299,8 +325,8 @@ export function InsightsSheet({
                       {priority === "high"
                         ? "High Priority"
                         : priority === "medium"
-                        ? "Medium Priority"
-                        : "Low Priority"}
+                          ? "Medium Priority"
+                          : "Low Priority"}
                     </Text>
                     <View style={styles.suggestionsList}>
                       {suggestions.map((suggestion, index) => (
@@ -333,7 +359,10 @@ export function InsightsSheet({
 
               <View style={styles.insightsList}>
                 {insights.behavioralInsights.map((insight, index) => {
-                  const colors = getInsightColors(insight.type, insight.severity);
+                  const colors = getInsightColors(
+                    insight.type,
+                    insight.severity,
+                  );
                   return (
                     <View key={index} style={styles.insightCard}>
                       <View
@@ -350,7 +379,9 @@ export function InsightsSheet({
                       </View>
                       <View style={styles.insightContent}>
                         <View style={styles.insightHeader}>
-                          <Text style={styles.insightTitle}>{insight.title}</Text>
+                          <Text style={styles.insightTitle}>
+                            {insight.title}
+                          </Text>
                           <View
                             style={[
                               styles.insightTypeBadge,
@@ -398,7 +429,12 @@ export function InsightsSheet({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <View style={[styles.container, { paddingBottom: insets.bottom }]}>
+      <View
+        style={[
+          styles.container,
+          { paddingTop: insets.top, paddingBottom: insets.bottom },
+        ]}
+      >
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.handle} />
@@ -453,7 +489,9 @@ export function InsightsSheet({
                     name={tab.icon}
                     size={16}
                     color={
-                      activeTab === tab.key ? COLORS.primary : COLORS.textSecondary
+                      activeTab === tab.key
+                        ? COLORS.primary
+                        : COLORS.textSecondary
                     }
                   />
                   <Text
@@ -486,7 +524,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
-    paddingTop: 8,
+    paddingTop: 12,
   },
   handle: {
     width: 36,
@@ -678,12 +716,17 @@ const styles = StyleSheet.create({
   healthScoreCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 20,
+    gap: 24,
     backgroundColor: COLORS.surface,
-    borderRadius: 20,
-    padding: 20,
+    borderRadius: 24,
+    padding: 24,
     borderWidth: 1,
     borderColor: COLORS.border,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
   },
   healthScoreInfo: {
     flex: 1,
@@ -702,17 +745,19 @@ const styles = StyleSheet.create({
   },
   statsRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
-    marginTop: 8,
+    marginTop: 12,
   },
   statPill: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     backgroundColor: "#F1F5F9",
     borderRadius: 8,
+    maxWidth: "100%",
   },
   statPillText: {
     fontSize: 12,
@@ -727,10 +772,10 @@ const styles = StyleSheet.create({
   },
   recommendationItem: {
     flexDirection: "row",
-    gap: 12,
+    gap: 16,
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: 16,
+    padding: 16,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
@@ -783,10 +828,10 @@ const styles = StyleSheet.create({
   },
   insightCard: {
     flexDirection: "row",
-    gap: 14,
+    gap: 16,
     backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 20,
+    padding: 20,
     borderWidth: 1,
     borderColor: COLORS.border,
   },

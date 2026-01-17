@@ -59,9 +59,10 @@ export function LimitSuggestionCard({
   isApplying,
 }: LimitSuggestionCardProps) {
   const priorityColors = getPriorityColor(suggestion.priority);
-  const reduction = suggestion.currentUsageMinutes - suggestion.suggestedLimitMinutes;
+  const reduction =
+    suggestion.currentUsageMinutes - suggestion.suggestedLimitMinutes;
   const reductionPercent = Math.round(
-    (reduction / suggestion.currentUsageMinutes) * 100
+    (reduction / suggestion.currentUsageMinutes) * 100,
   );
 
   return (
@@ -209,11 +210,16 @@ const styles = StyleSheet.create({
   // Full card styles
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 20,
+    padding: 20,
     borderWidth: 1,
     borderColor: COLORS.border,
-    gap: 14,
+    gap: 16,
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   header: {
     flexDirection: "row",
@@ -265,8 +271,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: "#F8FAFC",
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   limitItem: {
     alignItems: "center",
@@ -280,7 +289,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   limitValue: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "700",
     color: COLORS.text,
     fontFamily: "Inter_700Bold",
@@ -309,7 +318,9 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: "#F8FAFC",
     borderRadius: 10,
-    padding: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
   reasoningText: {
     flex: 1,
@@ -369,7 +380,7 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 14,
     backgroundColor: COLORS.surface,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: COLORS.border,
   },

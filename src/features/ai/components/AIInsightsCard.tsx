@@ -1,7 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
-import type { AIInsightsResponse, BehavioralInsight } from "../types/ai-responses";
+import type {
+  AIInsightsResponse,
+  BehavioralInsight,
+} from "../types/ai-responses";
 import { HealthScoreRing } from "./HealthScoreRing";
 
 const COLORS = {
@@ -27,7 +36,9 @@ interface AIInsightsCardProps {
   isRefreshing?: boolean;
 }
 
-function getInsightIcon(type: BehavioralInsight["type"]): keyof typeof Ionicons.glyphMap {
+function getInsightIcon(
+  type: BehavioralInsight["type"],
+): keyof typeof Ionicons.glyphMap {
   switch (type) {
     case "pattern":
       return "analytics-outline";
@@ -42,7 +53,10 @@ function getInsightIcon(type: BehavioralInsight["type"]): keyof typeof Ionicons.
   }
 }
 
-function getInsightColor(type: BehavioralInsight["type"], severity?: BehavioralInsight["severity"]): string {
+function getInsightColor(
+  type: BehavioralInsight["type"],
+  severity?: BehavioralInsight["severity"],
+): string {
   if (type === "concern") {
     if (severity === "critical") return COLORS.error;
     if (severity === "warning") return COLORS.warning;
@@ -53,7 +67,9 @@ function getInsightColor(type: BehavioralInsight["type"], severity?: BehavioralI
   return COLORS.info;
 }
 
-function getTrendIcon(trend: AIInsightsResponse["weeklyTrend"]): keyof typeof Ionicons.glyphMap {
+function getTrendIcon(
+  trend: AIInsightsResponse["weeklyTrend"],
+): keyof typeof Ionicons.glyphMap {
   switch (trend) {
     case "increasing":
       return "trending-up";
@@ -125,7 +141,11 @@ export function AIInsightsCard({
     return (
       <View style={styles.card}>
         <View style={styles.emptyContent}>
-          <Ionicons name="sparkles-outline" size={28} color={COLORS.textSecondary} />
+          <Ionicons
+            name="sparkles-outline"
+            size={28}
+            color={COLORS.textSecondary}
+          />
           <Text style={styles.emptyTitle}>No insights yet</Text>
           <Text style={styles.emptyText}>
             Collect more usage data to get AI-powered insights
@@ -220,7 +240,9 @@ export function AIInsightsCard({
           <View
             style={[
               styles.insightIcon,
-              { backgroundColor: `${getInsightColor(topInsight.type, topInsight.severity)}15` },
+              {
+                backgroundColor: `${getInsightColor(topInsight.type, topInsight.severity)}15`,
+              },
             ]}
           >
             <Ionicons
@@ -237,7 +259,11 @@ export function AIInsightsCard({
               {topInsight.description}
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
+          <Ionicons
+            name="chevron-forward"
+            size={18}
+            color={COLORS.textSecondary}
+          />
         </View>
       )}
 
@@ -252,160 +278,174 @@ export function AIInsightsCard({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: 20,
-    padding: 16,
+    borderRadius: 24,
+    padding: 20,
     borderWidth: 1,
     borderColor: COLORS.border,
     shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
   cardPressed: {
-    backgroundColor: "#FAFAFA",
+    transform: [{ scale: 0.995 }],
+    backgroundColor: "#F8FAFC",
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 16,
+    marginBottom: 20,
   },
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
   },
   aiIconBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     backgroundColor: COLORS.primaryLight,
     alignItems: "center",
     justifyContent: "center",
   },
   headerTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "700",
     color: COLORS.text,
     fontFamily: "Inter_700Bold",
+    letterSpacing: -0.5,
   },
   refreshButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primaryLight,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.background,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   refreshButtonPressed: {
-    backgroundColor: "#BFDBFE",
+    backgroundColor: COLORS.primaryLight,
+    borderColor: COLORS.primaryLight,
   },
   mainContent: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
-    marginBottom: 16,
+    gap: 20,
+    marginBottom: 20,
   },
   statsColumn: {
     flex: 1,
-    gap: 12,
+    gap: 16,
   },
   statRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
   },
   statItem: {
-    flex: 1,
-    gap: 2,
+    gap: 4,
   },
   statDivider: {
     width: 1,
-    height: 28,
+    height: 32,
     backgroundColor: COLORS.border,
-    marginHorizontal: 12,
+    marginHorizontal: 16,
+    alignSelf: "center",
   },
   statLabel: {
-    fontSize: 11,
+    fontSize: 12,
+    fontWeight: "600",
     color: COLORS.textSecondary,
-    fontFamily: "Inter_500Medium",
+    fontFamily: "Inter_600SemiBold",
     textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   statValue: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "700",
     color: COLORS.text,
     fontFamily: "Inter_700Bold",
+    letterSpacing: -0.5,
   },
   trendRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 6,
+    marginTop: 2,
   },
   trendText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
     fontFamily: "Inter_600SemiBold",
-    textTransform: "capitalize",
   },
   suggestionsBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    backgroundColor: COLORS.primaryLight,
-    borderRadius: 8,
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "#EFF6FF",
+    borderRadius: 12,
     alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
   },
   suggestionsText: {
-    fontSize: 12,
+    fontSize: 13,
     color: COLORS.primary,
     fontFamily: "Inter_600SemiBold",
   },
   insightPreview: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    padding: 12,
+    gap: 14,
+    padding: 16,
     backgroundColor: COLORS.background,
-    borderRadius: 12,
-    marginBottom: 12,
+    borderRadius: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "rgba(226, 232, 240, 0.6)",
   },
   insightIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
   },
   insightContent: {
     flex: 1,
-    gap: 2,
+    gap: 4,
   },
   insightTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "600",
     color: COLORS.text,
     fontFamily: "Inter_600SemiBold",
   },
   insightDescription: {
-    fontSize: 12,
+    fontSize: 13,
     color: COLORS.textSecondary,
     fontFamily: "Inter_400Regular",
-    lineHeight: 16,
+    lineHeight: 18,
   },
   footer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    paddingTop: 8,
+    gap: 6,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
+    marginTop: 4,
   },
   footerText: {
-    fontSize: 12,
+    fontSize: 13,
     color: COLORS.primary,
     fontFamily: "Inter_600SemiBold",
   },
@@ -415,10 +455,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 12,
-    paddingVertical: 32,
+    paddingVertical: 40,
   },
   loadingText: {
-    fontSize: 14,
+    fontSize: 15,
     color: COLORS.textSecondary,
     fontFamily: "Inter_500Medium",
   },
@@ -426,23 +466,23 @@ const styles = StyleSheet.create({
   errorContent: {
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    paddingVertical: 24,
+    gap: 12,
+    paddingVertical: 32,
   },
   errorText: {
-    fontSize: 14,
+    fontSize: 15,
     color: COLORS.error,
     fontFamily: "Inter_500Medium",
   },
   retryButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
     backgroundColor: COLORS.primaryLight,
-    borderRadius: 8,
-    marginTop: 8,
+    borderRadius: 10,
+    marginTop: 4,
   },
   retryText: {
-    fontSize: 13,
+    fontSize: 14,
     color: COLORS.primary,
     fontFamily: "Inter_600SemiBold",
   },
@@ -450,20 +490,21 @@ const styles = StyleSheet.create({
   emptyContent: {
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    paddingVertical: 24,
+    gap: 12,
+    paddingVertical: 32,
   },
   emptyTitle: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: "600",
     color: COLORS.text,
     fontFamily: "Inter_600SemiBold",
   },
   emptyText: {
-    fontSize: 13,
+    fontSize: 14,
     color: COLORS.textSecondary,
     fontFamily: "Inter_400Regular",
     textAlign: "center",
-    maxWidth: 220,
+    maxWidth: 240,
+    lineHeight: 20,
   },
 });
