@@ -13,7 +13,6 @@ export { useUsageAnalytics } from "./hooks/useUsageAnalytics";
 
 // Services
 export { generateInsights } from "./services/gemini-insights";
-export { getInsightsModel } from "./services/gemini-client";
 
 // Components
 export { AIInsightsCard } from "./components/AIInsightsCard";
