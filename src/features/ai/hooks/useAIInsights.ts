@@ -21,9 +21,31 @@ export function useAIInsights(
     queryKey: ["ai", "insights", childId, analysisDays],
     queryFn: async (): Promise<AIInsightsResponse> => {
       if (!analyticsData) {
-        throw new Error("No analytics data available");
+        const error = new Error("No analytics data available");
+        if (__DEV__) {
+          console.error("AI insights skipped: missing analytics data", {
+            childId,
+            analysisDays,
+          });
+        }
+        throw error;
       }
-      return generateInsights(analyticsData.childContext, analyticsData.usageData);
+      try {
+        return await generateInsights(
+          analyticsData.childContext,
+          analyticsData.usageData
+        );
+      } catch (error) {
+        if (__DEV__) {
+          console.error("AI insights generation failed", {
+            childId,
+            analysisDays,
+            usageCount: analyticsData.usageData?.length ?? 0,
+            error,
+          });
+        }
+        throw error;
+      }
     },
     enabled: Boolean(childId) && Boolean(analyticsData),
     staleTime: 30 * 60 * 1000, // 30 minutes - AI insights don't change frequently
@@ -34,9 +56,31 @@ export function useAIInsights(
   const refreshMutation = useMutation({
     mutationFn: async () => {
       if (!analyticsData) {
-        throw new Error("No analytics data available");
+        const error = new Error("No analytics data available");
+        if (__DEV__) {
+          console.error("AI insights refresh skipped: missing analytics data", {
+            childId,
+            analysisDays,
+          });
+        }
+        throw error;
       }
-      return generateInsights(analyticsData.childContext, analyticsData.usageData);
+      try {
+        return await generateInsights(
+          analyticsData.childContext,
+          analyticsData.usageData
+        );
+      } catch (error) {
+        if (__DEV__) {
+          console.error("AI insights refresh failed", {
+            childId,
+            analysisDays,
+            usageCount: analyticsData.usageData?.length ?? 0,
+            error,
+          });
+        }
+        throw error;
+      }
     },
     onSuccess: (data) => {
       queryClient.setQueryData(
