@@ -77,27 +77,28 @@ export async function syncChildDeviceUsage(
     const usageDate = getIsoDate(start);
     const stats = await fetchUsageStats(start.getTime(), end.getTime());
 
+    // Deduplicate stats by package - Android can return multiple entries per package
+    // Take the maximum value for each package to avoid double-counting
+    const dedupedStats = new Map<string, number>();
     for (const stat of stats) {
       const totalSeconds = Math.round((stat.totalTimeMs ?? 0) / 1000);
       if (totalSeconds <= 0) {
         continue;
       }
-      packagesWithUsage.add(stat.packageName);
+      const currentMax = dedupedStats.get(stat.packageName) ?? 0;
+      dedupedStats.set(stat.packageName, Math.max(currentMax, totalSeconds));
+    }
+
+    for (const [packageName, totalSeconds] of dedupedStats.entries()) {
+      packagesWithUsage.add(packageName);
       usageByPackage.set(
-        stat.packageName,
-        (usageByPackage.get(stat.packageName) ?? 0) + totalSeconds
+        packageName,
+        (usageByPackage.get(packageName) ?? 0) + totalSeconds
       );
-      const key = `${childId}:${stat.packageName}:${usageDate}`;
-      const existing = usageByKey.get(key);
-      if (existing) {
-        existing.total_seconds = (existing.total_seconds ?? 0) + totalSeconds;
-        existing.last_synced_at = now.toISOString();
-        existing.device_id = deviceId;
-        continue;
-      }
+      const key = `${childId}:${packageName}:${usageDate}`;
       usageByKey.set(key, {
         child_id: childId,
-        package_name: stat.packageName,
+        package_name: packageName,
         total_seconds: totalSeconds,
         open_count: 0,
         usage_date: usageDate,

@@ -2,6 +2,7 @@ package com.screentime.usage
 
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.AppOpsManager
+import android.app.NotificationManager
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
@@ -14,6 +15,7 @@ import android.graphics.drawable.Drawable
 import android.os.Build
 import android.provider.Settings
 import android.util.Base64
+import android.util.Log
 import android.view.accessibility.AccessibilityManager
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -61,17 +63,29 @@ class UsageStatsModule : Module() {
       val context = appContext.reactContext ?: return@AsyncFunction emptyList<Map<String, Any?>>()
       val usageManager =
         context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+
+      // Use INTERVAL_BEST for most accurate per-day stats
       val stats = usageManager.queryUsageStats(
-        UsageStatsManager.INTERVAL_DAILY,
+        UsageStatsManager.INTERVAL_BEST,
         startTimeMs.toLong(),
         endTimeMs.toLong()
       )
 
-      stats.map { stat ->
+      // Deduplicate by package - take the maximum foreground time per package
+      // Android can return multiple entries for the same package
+      val packageStats = mutableMapOf<String, Pair<Long, Long>>()
+      for (stat in stats) {
+        val existing = packageStats[stat.packageName]
+        if (existing == null || stat.totalTimeInForeground > existing.first) {
+          packageStats[stat.packageName] = Pair(stat.totalTimeInForeground, stat.lastTimeUsed)
+        }
+      }
+
+      packageStats.map { (packageName, data) ->
         mapOf(
-          "packageName" to stat.packageName,
-          "totalTimeMs" to stat.totalTimeInForeground,
-          "lastTimeUsed" to stat.lastTimeUsed
+          "packageName" to packageName,
+          "totalTimeMs" to data.first,
+          "lastTimeUsed" to data.second
         )
       }
     }
@@ -141,6 +155,59 @@ class UsageStatsModule : Module() {
         Base64.encodeToString(bytes, Base64.NO_WRAP)
       } catch (e: Exception) {
         null
+      }
+    }
+
+    // Do Not Disturb (DND) mode functions
+    Function("isDndAccessGranted") {
+      val context = appContext.reactContext ?: return@Function false
+      val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+      notificationManager.isNotificationPolicyAccessGranted
+    }
+
+    Function("requestDndAccess") {
+      val context = appContext.reactContext ?: return@Function null
+      val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+      intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      context.startActivity(intent)
+    }
+
+    AsyncFunction("setDndMode") { enabled: Boolean ->
+      val context = appContext.reactContext ?: return@AsyncFunction false
+      val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+      if (!notificationManager.isNotificationPolicyAccessGranted) {
+        Log.w("UsageStatsModule", "DND access not granted, cannot set DND mode")
+        return@AsyncFunction false
+      }
+
+      try {
+        if (enabled) {
+          // Enable DND - Priority only mode (allows alarms and important notifications)
+          notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
+          Log.d("UsageStatsModule", "DND mode enabled (priority only)")
+        } else {
+          // Disable DND - All notifications allowed
+          notificationManager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL)
+          Log.d("UsageStatsModule", "DND mode disabled")
+        }
+        true
+      } catch (e: Exception) {
+        Log.e("UsageStatsModule", "Failed to set DND mode", e)
+        false
+      }
+    }
+
+    Function("getDndMode") {
+      val context = appContext.reactContext ?: return@Function "unknown"
+      val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+      when (notificationManager.currentInterruptionFilter) {
+        NotificationManager.INTERRUPTION_FILTER_ALL -> "off"
+        NotificationManager.INTERRUPTION_FILTER_PRIORITY -> "priority"
+        NotificationManager.INTERRUPTION_FILTER_NONE -> "total_silence"
+        NotificationManager.INTERRUPTION_FILTER_ALARMS -> "alarms_only"
+        else -> "unknown"
       }
     }
   }

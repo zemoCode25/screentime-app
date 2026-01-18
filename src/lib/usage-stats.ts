@@ -15,9 +15,15 @@ import {
   updateBlockedPackagesWithReasons,
   updateTimeRules,
   updateDailyLimit,
+  // DND functions
+  isDndAccessGranted as nativeIsDndAccessGranted,
+  requestDndAccess as nativeRequestDndAccess,
+  setDndMode as nativeSetDndMode,
+  getDndMode as nativeGetDndMode,
   type BlockedPackageWithReason,
   type TimeRule,
   type DailyLimitSettings,
+  type DndMode,
 } from "screentime-usage";
 
 export type InstalledApp = {
@@ -181,4 +187,60 @@ export async function setDailyLimitSettings(
 }
 
 // Re-export types for convenience
-export type { TimeRule, DailyLimitSettings };
+export type { TimeRule, DailyLimitSettings, DndMode };
+
+// Do Not Disturb (DND) mode functions
+
+export type DndAccessStatus = "granted" | "needs-permission" | "unavailable";
+
+export function canUseDnd(): boolean {
+  return Platform.OS === "android" && isUsageModuleAvailable();
+}
+
+export function isDndAccessGranted(): boolean {
+  if (!canUseDnd()) {
+    return false;
+  }
+  return nativeIsDndAccessGranted();
+}
+
+export async function ensureDndAccess(): Promise<DndAccessStatus> {
+  if (!canUseDnd()) {
+    return "unavailable";
+  }
+  const granted = nativeIsDndAccessGranted();
+  if (granted) {
+    return "granted";
+  }
+  nativeRequestDndAccess();
+  return "needs-permission";
+}
+
+export async function enableDndMode(): Promise<boolean> {
+  if (!canUseDnd()) {
+    return false;
+  }
+  if (!nativeIsDndAccessGranted()) {
+    console.warn("[DND] DND access not granted, cannot enable DND mode");
+    return false;
+  }
+  return nativeSetDndMode(true);
+}
+
+export async function disableDndMode(): Promise<boolean> {
+  if (!canUseDnd()) {
+    return false;
+  }
+  if (!nativeIsDndAccessGranted()) {
+    console.warn("[DND] DND access not granted, cannot disable DND mode");
+    return false;
+  }
+  return nativeSetDndMode(false);
+}
+
+export function getCurrentDndMode(): DndMode {
+  if (!canUseDnd()) {
+    return "unknown";
+  }
+  return nativeGetDndMode();
+}
