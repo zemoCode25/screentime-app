@@ -5,13 +5,18 @@ import type { Database } from "@/types/database-types";
 
 import {
   canUseAccessibility,
+  // DND mode
+  canUseDnd,
   checkAccessibilityEnabled,
+  disableDndMode,
+  enableDndMode,
   fetchInstalledApps,
   fetchUsageStats,
+  isDndAccessGranted,
   setAppLimits,
   setBlockedPackagesWithReasons,
-  setTimeRules,
   setDailyLimitSettings,
+  setTimeRules,
   type TimeRule,
 } from "@/src/lib/usage-stats";
 
@@ -19,12 +24,16 @@ import {
   cancelAllConstraintAlarms,
   configureNotifications,
   scheduleConstraintAlarms,
+  showAppLimitReachedNotification,
+  showDailyLimitReachedNotification,
+  showLimitWarningNotification,
 } from "./alarm-scheduler";
 import {
   BlockedPackageWithReason,
   calculateAllBlockedPackages,
 } from "./blocking-enforcement";
 import { fetchChildConstraints } from "./child-service";
+import { isWithinBedtime } from "./constraint-utils";
 
 type AppLimitRow = Database["public"]["Tables"]["app_limits"]["Row"];
 type AppAccessOverrideRow =
@@ -54,7 +63,7 @@ async function fetchAppLimits(childId: string): Promise<AppLimitRow[]> {
  * Fetches active access overrides for a child
  */
 async function fetchActiveOverrides(
-  childId: string
+  childId: string,
 ): Promise<AppAccessOverrideRow[]> {
   const now = new Date().toISOString();
   const { data, error } = await supabase
@@ -99,14 +108,11 @@ async function fetchTodayUsageFromDevice(): Promise<Map<string, number>> {
     console.log(
       "[EnforcementManager] Fetched device usage for",
       usageMap.size,
-      "apps"
+      "apps",
     );
     return usageMap;
   } catch (error) {
-    console.error(
-      "[EnforcementManager] Failed to fetch device usage:",
-      error
-    );
+    console.error("[EnforcementManager] Failed to fetch device usage:", error);
     return new Map();
   }
 }
@@ -130,6 +136,14 @@ class ConstraintEnforcementManager {
   > | null = null;
   private lastAppState: AppStateStatus = "unknown";
   private isStarted = false;
+  // Track packages we've already notified about to avoid duplicate notifications
+  private notifiedAppLimits = new Set<string>();
+  private notifiedDailyLimit = false;
+  private notifiedWarnings = new Set<string>();
+  // Store app names for notifications
+  private appNameCache = new Map<string, string>();
+  // Track if we enabled DND mode (to not disable if user enabled it manually)
+  private dndEnabledByUs = false;
 
   /**
    * Start the enforcement manager for a child.
@@ -148,7 +162,7 @@ class ConstraintEnforcementManager {
 
     console.log(
       "[EnforcementManager] Starting event-driven mode for child:",
-      childId
+      childId,
     );
 
     // Configure notifications for alarm scheduling
@@ -157,7 +171,7 @@ class ConstraintEnforcementManager {
     // Subscribe to app state changes
     this.appStateSubscription = AppState.addEventListener(
       "change",
-      this.handleAppStateChange
+      this.handleAppStateChange,
     );
 
     // Run initial evaluation (this will also schedule alarms)
@@ -175,6 +189,13 @@ class ConstraintEnforcementManager {
 
     // Cancel all scheduled alarms
     await cancelAllConstraintAlarms();
+
+    // Disable DND if we enabled it
+    if (this.dndEnabledByUs && canUseDnd() && isDndAccessGranted()) {
+      console.log("[EnforcementManager] Disabling DND on stop");
+      await disableDndMode();
+      this.dndEnabledByUs = false;
+    }
 
     this.childId = null;
     this.isEvaluating = false;
@@ -194,7 +215,7 @@ class ConstraintEnforcementManager {
       nextAppState === "active"
     ) {
       console.log(
-        "[EnforcementManager] App came to foreground, evaluating constraints"
+        "[EnforcementManager] App came to foreground, evaluating constraints",
       );
       this.evaluateNow();
     }
@@ -236,7 +257,7 @@ class ConstraintEnforcementManager {
    */
   async onConstraintsUpdated(): Promise<void> {
     console.log(
-      "[EnforcementManager] Constraints updated by parent, re-evaluating"
+      "[EnforcementManager] Constraints updated by parent, re-evaluating",
     );
     await this.evaluateNow();
   }
@@ -267,14 +288,14 @@ class ConstraintEnforcementManager {
     // Check if accessibility service is available and enabled
     if (!canUseAccessibility()) {
       console.log(
-        "[EnforcementManager] Accessibility not available on this platform"
+        "[EnforcementManager] Accessibility not available on this platform",
       );
       return;
     }
 
     if (!checkAccessibilityEnabled()) {
       console.log(
-        "[EnforcementManager] Accessibility service not enabled, skipping"
+        "[EnforcementManager] Accessibility service not enabled, skipping",
       );
       return;
     }
@@ -320,7 +341,7 @@ class ConstraintEnforcementManager {
       }));
       console.log(
         "[EnforcementManager] Pushing time rules to native:",
-        nativeTimeRules.length
+        nativeTimeRules.length,
       );
       await setTimeRules(nativeTimeRules);
     }
@@ -331,12 +352,17 @@ class ConstraintEnforcementManager {
         "[EnforcementManager] Pushing daily limit to native:",
         usageSettings.daily_limit_seconds,
         "bonus:",
-        usageSettings.weekend_bonus_seconds
+        usageSettings.weekend_bonus_seconds,
       );
       await setDailyLimitSettings({
         limitSeconds: usageSettings.daily_limit_seconds,
         weekendBonusSeconds: usageSettings.weekend_bonus_seconds,
       });
+    }
+
+    // Update app name cache for notifications
+    for (const app of installedApps) {
+      this.appNameCache.set(app.packageName, app.appName);
     }
 
     // Calculate blocked packages with reasons
@@ -346,7 +372,7 @@ class ConstraintEnforcementManager {
       overrides,
       timeRules,
       usageSettings,
-      allPackages
+      allPackages,
     );
 
     this.lastBlockedPackages = blockedPackages;
@@ -354,7 +380,15 @@ class ConstraintEnforcementManager {
     console.log(
       "[EnforcementManager] Blocked packages:",
       blockedPackages.length,
-      blockedPackages.slice(0, 5).map((p) => `${p.packageName}:${p.reason}`)
+      blockedPackages.slice(0, 5).map((p) => `${p.packageName}:${p.reason}`),
+    );
+
+    // Send notifications for newly blocked packages
+    await this.sendBlockNotifications(
+      blockedPackages,
+      appLimits,
+      usageToday,
+      usageSettings,
     );
 
     // Update native module with blocked packages and reasons
@@ -387,10 +421,166 @@ class ConstraintEnforcementManager {
       console.log(
         "[EnforcementManager] Setting app limits for native timers:",
         Object.keys(appLimitsForToday).length,
-        "apps"
+        "apps",
       );
       await setAppLimits(appLimitsForToday);
     }
+
+    // Manage Do Not Disturb mode based on bedtime status
+    await this.manageDndMode(timeRules);
+  }
+
+  /**
+   * Manages Do Not Disturb mode based on whether bedtime is currently active.
+   * Enables DND when bedtime starts, disables it when bedtime ends.
+   */
+  private async manageDndMode(timeRules: ChildTimeRuleRow[]): Promise<void> {
+    // Check if DND is available and permission granted
+    if (!canUseDnd()) {
+      return;
+    }
+
+    if (!isDndAccessGranted()) {
+      console.log(
+        "[EnforcementManager] DND access not granted, skipping DND management",
+      );
+      return;
+    }
+
+    const now = new Date();
+    const bedtimeActive = isWithinBedtime(timeRules, now);
+
+    if (bedtimeActive && !this.dndEnabledByUs) {
+      // Bedtime just started, enable DND
+      console.log("[EnforcementManager] Bedtime active, enabling DND mode");
+      const success = await enableDndMode();
+      if (success) {
+        this.dndEnabledByUs = true;
+        console.log("[EnforcementManager] DND mode enabled for bedtime");
+      } else {
+        console.warn("[EnforcementManager] Failed to enable DND mode");
+      }
+    } else if (!bedtimeActive && this.dndEnabledByUs) {
+      // Bedtime just ended, disable DND
+      console.log("[EnforcementManager] Bedtime ended, disabling DND mode");
+      const success = await disableDndMode();
+      if (success) {
+        this.dndEnabledByUs = false;
+        console.log("[EnforcementManager] DND mode disabled after bedtime");
+      } else {
+        console.warn("[EnforcementManager] Failed to disable DND mode");
+      }
+    }
+  }
+
+  /**
+   * Sends notifications for newly blocked packages and approaching limits
+   */
+  private async sendBlockNotifications(
+    blockedPackages: BlockedPackageWithReason[],
+    appLimits: AppLimitRow[],
+    usageToday: Map<string, number>,
+    usageSettings: ChildUsageSettingsRow | null,
+  ): Promise<void> {
+    // Check for daily limit exceeded notification
+    const hasDailyLimitBlocked = blockedPackages.some(
+      (pkg) => pkg.reason === "daily_limit",
+    );
+    if (hasDailyLimitBlocked && !this.notifiedDailyLimit) {
+      this.notifiedDailyLimit = true;
+      const limitMinutes = Math.round(
+        (usageSettings?.daily_limit_seconds ?? 0) / 60,
+      );
+      await showDailyLimitReachedNotification(limitMinutes);
+    }
+
+    // Check for per-app limit exceeded notifications
+    for (const blocked of blockedPackages) {
+      if (blocked.reason === "app_limit") {
+        if (!this.notifiedAppLimits.has(blocked.packageName)) {
+          this.notifiedAppLimits.add(blocked.packageName);
+          const appName =
+            this.appNameCache.get(blocked.packageName) ?? blocked.packageName;
+          await showAppLimitReachedNotification(appName, blocked.packageName);
+        }
+      }
+    }
+
+    // Check for 5-minute warnings on apps that aren't blocked yet
+    const dayOfWeek = new Date().getDay();
+    const dayToFlag: Record<number, keyof AppLimitRow> = {
+      0: "applies_sun",
+      1: "applies_mon",
+      2: "applies_tue",
+      3: "applies_wed",
+      4: "applies_thu",
+      5: "applies_fri",
+      6: "applies_sat",
+    };
+
+    for (const limit of appLimits) {
+      const dayFlag = dayToFlag[dayOfWeek];
+      if (!limit[dayFlag]) continue;
+
+      // Skip if already blocked
+      if (
+        blockedPackages.some((pkg) => pkg.packageName === limit.package_name)
+      ) {
+        continue;
+      }
+
+      const usedSeconds = usageToday.get(limit.package_name) ?? 0;
+      const remainingSeconds = limit.limit_seconds - usedSeconds;
+      const remainingMinutes = Math.round(remainingSeconds / 60);
+
+      // Show 5-minute warning
+      if (remainingMinutes === 5) {
+        const warningKey = `app_${limit.package_name}`;
+        if (!this.notifiedWarnings.has(warningKey)) {
+          this.notifiedWarnings.add(warningKey);
+          const appName =
+            this.appNameCache.get(limit.package_name) ?? limit.package_name;
+          await showLimitWarningNotification("app", appName, 5);
+        }
+      }
+    }
+
+    // Check for daily limit 5-minute warning
+    if (
+      usageSettings &&
+      usageSettings.daily_limit_seconds > 0 &&
+      !hasDailyLimitBlocked
+    ) {
+      let totalUsedSeconds = 0;
+      for (const seconds of usageToday.values()) {
+        totalUsedSeconds += seconds;
+      }
+
+      const now = new Date();
+      const isWeekend = now.getDay() === 0 || now.getDay() === 6;
+      const bonusSeconds = isWeekend
+        ? (usageSettings.weekend_bonus_seconds ?? 0)
+        : 0;
+      const effectiveLimit = usageSettings.daily_limit_seconds + bonusSeconds;
+
+      const remainingSeconds = effectiveLimit - totalUsedSeconds;
+      const remainingMinutes = Math.round(remainingSeconds / 60);
+
+      if (remainingMinutes === 5 && !this.notifiedWarnings.has("daily_limit")) {
+        this.notifiedWarnings.add("daily_limit");
+        await showLimitWarningNotification("daily", "Screen Time", 5);
+      }
+    }
+  }
+
+  /**
+   * Reset daily notification tracking (call at midnight)
+   */
+  resetDailyNotifications(): void {
+    this.notifiedAppLimits.clear();
+    this.notifiedDailyLimit = false;
+    this.notifiedWarnings.clear();
+    console.log("[EnforcementManager] Reset daily notification tracking");
   }
 }
 

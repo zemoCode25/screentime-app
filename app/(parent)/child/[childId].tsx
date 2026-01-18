@@ -1,4 +1,5 @@
 ﻿import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -11,6 +12,12 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import {
+  AIInsightsCard,
+  InsightsSheet,
+  useAIInsights,
+  type AppLimitSuggestion,
+} from "@/src/features/ai";
 import {
   useChildApps,
   useChildAppUsageDetails,
@@ -53,19 +60,40 @@ export default function ParentChildScreen() {
   const resolvedChildId = Array.isArray(childId) ? childId[0] : childId;
   const [visibleAppCount, setVisibleAppCount] = useState(15);
   const [timeFilter, setTimeFilter] = useState<TimeFilterKey>("30d");
+  const [insightsSheetVisible, setInsightsSheetVisible] = useState(false);
   const selectedWindowDays =
     TIME_FILTERS.find((option) => option.key === timeFilter)?.days ?? 30;
 
   const childQuery = useChildDetails(resolvedChildId);
-  const usageQuery = useChildUsageSummary(
-    resolvedChildId,
-    selectedWindowDays
-  );
+  const usageQuery = useChildUsageSummary(resolvedChildId, selectedWindowDays);
   const appsQuery = useChildApps(resolvedChildId);
   const appUsageQuery = useChildAppUsageDetails(
     resolvedChildId,
-    selectedWindowDays
+    selectedWindowDays,
   );
+
+  // AI Insights
+  const {
+    insights,
+    isLoading: isLoadingInsights,
+    error: insightsError,
+    refresh: refreshInsights,
+    isRefreshing: isRefreshingInsights,
+    hasData: hasUsageData,
+  } = useAIInsights(resolvedChildId, 14);
+
+  const handleApplyLimit = (suggestion: AppLimitSuggestion) => {
+    // Navigate to the limit screen with pre-filled values
+    router.push({
+      pathname: "/(parent)/child/app/limit",
+      params: {
+        childId: resolvedChildId,
+        packageName: suggestion.packageName,
+        suggestedLimit: suggestion.suggestedLimitMinutes.toString(),
+      },
+    });
+    setInsightsSheetVisible(false);
+  };
 
   const isLoading =
     childQuery.isLoading ||
@@ -111,22 +139,19 @@ export default function ParentChildScreen() {
   }, [apps, usageByPackage]);
 
   const filteredApps = useMemo(
-    () =>
-      sortedApps.filter(
-        (app) => app.totalSeconds > 0 || app.openCount > 0
-      ),
-    [sortedApps]
+    () => sortedApps.filter((app) => app.totalSeconds > 0 || app.openCount > 0),
+    [sortedApps],
   );
   const visibleApps = filteredApps.slice(0, visibleAppCount);
   const hasMoreApps = filteredApps.length > visibleAppCount;
   const appCount = filteredApps.length;
 
   const appNameMap = new Map(
-    apps.map((app) => [app.package_name, app.app_name])
+    apps.map((app) => [app.package_name, app.app_name]),
   );
 
   const mostUsedApp = usage?.mostUsedPackage
-    ? appNameMap.get(usage.mostUsedPackage) ?? usage.mostUsedPackage
+    ? (appNameMap.get(usage.mostUsedPackage) ?? usage.mostUsedPackage)
     : "No data yet";
 
   const handleLoadMore = () => {
@@ -314,6 +339,18 @@ export default function ParentChildScreen() {
           </View>
         </View>
 
+        {/* AI Insights Section */}
+        {hasUsageData && (
+          <AIInsightsCard
+            insights={insights}
+            isLoading={isLoadingInsights}
+            error={insightsError}
+            onPress={() => setInsightsSheetVisible(true)}
+            onRefresh={refreshInsights}
+            isRefreshing={isRefreshingInsights}
+          />
+        )}
+
         <View style={styles.appsSection}>
           <View style={styles.appsHeader}>
             <Text style={styles.sectionTitleLarge}>Installed Apps</Text>
@@ -368,11 +405,24 @@ export default function ParentChildScreen() {
                     <Text style={styles.rankText}>#{index + 1}</Text>
                   </View>
                   <View style={styles.appIcon}>
-                    <Ionicons
-                      name="cube-outline"
-                      size={20}
-                      color={COLORS.primary}
-                    />
+                    {app.icon_url ? (
+                      <Image
+                        source={{ uri: app.icon_url }}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          borderRadius: 10,
+                        }}
+                        contentFit="cover"
+                        transition={200}
+                      />
+                    ) : (
+                      <Ionicons
+                        name="cube-outline"
+                        size={20}
+                        color={COLORS.primary}
+                      />
+                    )}
                   </View>
                   <View style={styles.appInfo}>
                     <Text style={styles.appName}>{app.app_name}</Text>
@@ -411,7 +461,8 @@ export default function ParentChildScreen() {
                     color={COLORS.primary}
                   />
                   <Text style={styles.loadMoreText}>
-                    Load more ({filteredApps.length - visibleAppCount} remaining)
+                    Load more ({filteredApps.length - visibleAppCount}{" "}
+                    remaining)
                   </Text>
                 </Pressable>
               ) : filteredApps.length > 15 ? (
@@ -434,13 +485,22 @@ export default function ParentChildScreen() {
             params: { childId: resolvedChildId },
           })
         }
-        style={({ pressed }) => [
-          styles.fab,
-          pressed && styles.fabPressed,
-        ]}
+        style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
       >
         <Ionicons name="add" size={28} color={COLORS.surface} />
       </Pressable>
+
+      {/* AI Insights Sheet */}
+      <InsightsSheet
+        visible={insightsSheetVisible}
+        onClose={() => setInsightsSheetVisible(false)}
+        insights={insights}
+        isLoading={isLoadingInsights}
+        error={insightsError}
+        onApplyLimit={handleApplyLimit}
+        onRefresh={refreshInsights}
+        isRefreshing={isRefreshingInsights}
+      />
     </SafeAreaView>
   );
 }

@@ -17,6 +17,8 @@ export type DailyLimitSettings = {
   weekendBonusSeconds: number;
 };
 
+export type DndMode = "off" | "priority" | "total_silence" | "alarms_only" | "unknown";
+
 type UsageStatsModuleType = {
   isUsageAccessGranted: () => boolean;
   openUsageAccessSettings: () => void;
@@ -50,6 +52,11 @@ type UsageStatsModuleType = {
   updateAppLimits: (limitsJson: string) => Promise<void>;
   updateTimeRules: (rulesJson: string) => Promise<void>;
   updateDailyLimit: (settingsJson: string) => Promise<void>;
+  // DND mode functions
+  isDndAccessGranted: () => boolean;
+  requestDndAccess: () => void;
+  setDndMode: (enabled: boolean) => Promise<boolean>;
+  getDndMode: () => DndMode;
 };
 
 const UsageStatsModule =
@@ -129,4 +136,22 @@ export function updateTimeRules(rules: TimeRule[]) {
 export function updateDailyLimit(settings: DailyLimitSettings) {
   const settingsJson = JSON.stringify(settings);
   return UsageStatsModule?.updateDailyLimit?.(settingsJson) ?? Promise.resolve();
+}
+
+// Do Not Disturb (DND) mode functions
+
+export function isDndAccessGranted() {
+  return UsageStatsModule?.isDndAccessGranted?.() ?? false;
+}
+
+export function requestDndAccess() {
+  UsageStatsModule?.requestDndAccess?.();
+}
+
+export function setDndMode(enabled: boolean) {
+  return UsageStatsModule?.setDndMode?.(enabled) ?? Promise.resolve(false);
+}
+
+export function getDndMode(): DndMode {
+  return UsageStatsModule?.getDndMode?.() ?? "unknown";
 }

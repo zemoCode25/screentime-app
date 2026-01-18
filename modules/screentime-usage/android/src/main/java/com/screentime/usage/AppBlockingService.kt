@@ -368,14 +368,13 @@ class AppBlockingService : AccessibilityService() {
             val startOfDay = calendar.timeInMillis
             val now = System.currentTimeMillis()
 
-            val stats = usageManager.queryUsageStats(
-                UsageStatsManager.INTERVAL_DAILY,
+            val statsMap = usageManager.queryAndAggregateUsageStats(
                 startOfDay,
                 now
             )
 
             var totalMs = 0L
-            for (stat in stats) {
+            for (stat in statsMap.values) {
                 // Exclude system allowlist apps from total
                 if (!isInSystemAllowlist(stat.packageName)) {
                     totalMs += stat.totalTimeInForeground
@@ -393,7 +392,17 @@ class AppBlockingService : AccessibilityService() {
      * Check if the app has remaining time and schedule a block timer if needed.
      * Queries UsageStatsManager for real-time usage data to calculate accurate remaining time.
      */
+    /**
+     * Check if the app has remaining time and schedule a block timer if needed.
+     * Queries UsageStatsManager for real-time usage data to calculate accurate remaining time.
+     */
     private fun checkAndScheduleTimerBlock(packageName: String) {
+        // Prevent scheduling multiple timers for the same package during the same session
+        if (pendingBlockPackage == packageName && pendingBlockRunnable != null) {
+            Log.d(TAG, "Timer already scheduled for $packageName, skipping reschedule")
+            return
+        }
+
         // Re-read limits from SharedPreferences to get fresh data
         val freshPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val limitsJsonStr = freshPrefs.getString(KEY_APP_LIMITS, null)
@@ -435,6 +444,9 @@ class AppBlockingService : AccessibilityService() {
 
         // Schedule a timer to block when time runs out
         Log.d(TAG, "Scheduling block for $packageName in ${remainingSeconds}s")
+
+        // Ensure we don't have a lingering timer (though the check at the top handles most cases)
+        cancelPendingBlock()
 
         pendingBlockPackage = packageName
         pendingBlockRunnable = Runnable {
@@ -489,14 +501,13 @@ class AppBlockingService : AccessibilityService() {
             val startOfDay = calendar.timeInMillis
             val now = System.currentTimeMillis()
 
-            val stats = usageManager.queryUsageStats(
-                UsageStatsManager.INTERVAL_DAILY,
+            val statsMap = usageManager.queryAndAggregateUsageStats(
                 startOfDay,
                 now
             )
 
             // Find the stats for our package
-            val appStats = stats.find { it.packageName == packageName }
+            val appStats = statsMap[packageName]
             val usageMs = appStats?.totalTimeInForeground ?: 0L
 
             // Convert milliseconds to seconds

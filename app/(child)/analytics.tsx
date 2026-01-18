@@ -21,7 +21,6 @@ import {
   type AppCategory,
 } from "@/src/utils/app-category";
 import { formatDuration } from "@/src/utils/time";
-import type { Database } from "@/types/database-types";
 
 const COLORS = {
   primary: "#2563EB",
@@ -36,7 +35,7 @@ const COLORS = {
   error: "#EF4444",
 };
 
-type ChildAppRow = Database["public"]["Tables"]["child_apps"]["Row"];
+import type { ChildAppRow } from "@/src/features/child/services/child-service";
 
 type CategorySlice = {
   key: AppCategory | "other";
@@ -190,7 +189,7 @@ export default function ChildAnalyticsScreen() {
 
       dailyTotals.set(
         row.usage_date,
-        (dailyTotals.get(row.usage_date) ?? 0) + seconds
+        (dailyTotals.get(row.usage_date) ?? 0) + seconds,
       );
 
       if (row.usage_date === todayKey) {
@@ -208,7 +207,7 @@ export default function ChildAnalyticsScreen() {
 
       const resolvedCategory = resolveAppCategory(
         appMap.get(row.package_name)?.category ?? "other",
-        row.package_name
+        row.package_name,
       );
       const existingCategoryTotal = categoryTotals.get(resolvedCategory) ?? 0;
       categoryTotals.set(resolvedCategory, existingCategoryTotal + seconds);
@@ -231,7 +230,7 @@ export default function ChildAnalyticsScreen() {
     const hourMaxValue = Math.max(...hourBuckets, 1);
     const hourPeakValue = Math.max(...hourBuckets, 0);
     const hourPeakIdx = hourBuckets.findIndex(
-      (value) => value === hourPeakValue
+      (value) => value === hourPeakValue,
     );
 
     const hourSeries: HourBar[] = hourBuckets.map((value, index) => ({
@@ -253,7 +252,7 @@ export default function ChildAnalyticsScreen() {
     const dayMaxValue = Math.max(...daySeries.map((bar) => bar.value), 1);
     const peakDay = daySeries.reduce(
       (current, next) => (next.value > current.value ? next : current),
-      daySeries[0]
+      daySeries[0],
     );
 
     let topPackage: string | null = null;
@@ -276,7 +275,7 @@ export default function ChildAnalyticsScreen() {
       behaviorDetail = "Use your device to start tracking insights.";
     } else {
       const sortedCategories = Array.from(categoryTotals.entries()).sort(
-        (a, b) => b[1] - a[1]
+        (a, b) => b[1] - a[1],
       );
       const topCategory = sortedCategories[0];
       const topShare = topCategory ? topCategory[1] / total : 0;
@@ -307,12 +306,12 @@ export default function ChildAnalyticsScreen() {
     }
 
     const sortedCategoryTotals = Array.from(categoryTotals.entries()).sort(
-      (a, b) => b[1] - a[1]
+      (a, b) => b[1] - a[1],
     );
 
     // Separate "other" from regular categories
     const nonOtherCategories = sortedCategoryTotals.filter(
-      ([key]) => key !== "other"
+      ([key]) => key !== "other",
     );
     const otherCategoryTotal = categoryTotals.get("other") ?? 0;
 
@@ -542,7 +541,7 @@ export default function ChildAnalyticsScreen() {
                 {hourBars.map((bar, index) => {
                   const heightPercent = Math.max(
                     Math.round((bar.value / hourMax) * 100),
-                    bar.value > 0 ? 6 : 0
+                    bar.value > 0 ? 6 : 0,
                   );
                   return (
                     <View key={bar.label} style={styles.hourBarTrack}>
